@@ -34,6 +34,7 @@ export class SolanaService {
 
     // Fetch SOL price from Coingecko
     const solPrice = await this.fetchSolPrice();
+    console.log("solPrice: ", solPrice);
     if (!solPrice) {
       throw new Error("Could not fetch SOL price");
     }
@@ -49,6 +50,7 @@ export class SolanaService {
   private async fetchSolPrice(): Promise<number | null> {
     try {
       const response = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+      console.log("fetch: ", response);
       return response.data.solana.usd;
     } catch (error) {
       console.error('Error fetching SOL price from Coingecko:', error);
