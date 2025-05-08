@@ -13,7 +13,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.addOrderToPaymentProfile = addOrderToPaymentProfile;
-exports.removeOrderFromPaymentProfile = removeOrderFromPaymentProfile;
 exports.updatePaymentProfileWithOrder = updatePaymentProfileWithOrder;
 const express_1 = __importDefault(require("express"));
 const dotenv_1 = require("dotenv");
@@ -22,16 +21,23 @@ const solanaService_1 = require("./services/solanaService");
 const firebase_admin_1 = __importDefault(require("firebase-admin"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const uuid_1 = require("uuid");
-// Initialize Firebase Admin SDK
-const firebaseDatabaseUrl = process.env.FIREBASE_DB_URL || "";
-if (firebase_admin_1.default.apps.length === 0) {
-    const serviceAccount = require("../esim-a3042-firebase-adminsdk-fbsvc-09dcd371d1.json");
-    firebase_admin_1.default.initializeApp({
-        credential: firebase_admin_1.default.credential.cert(serviceAccount),
-        databaseURL: firebaseDatabaseUrl,
+// Declare db outside the async function so it's accessible later
+let db;
+function initializeFirebase() {
+    return __awaiter(this, void 0, void 0, function* () {
+        // Initialize Firebase Admin SDK
+        const firebaseDatabaseUrl = process.env.FIREBASE_DB_URL || "";
+        if (firebase_admin_1.default.apps.length === 0) {
+            // Fetch the service account using the async function
+            const serviceAccount = yield accessSecretVersion('firebase-admin'); // Use the correct secret name
+            firebase_admin_1.default.initializeApp({
+                credential: firebase_admin_1.default.credential.cert(serviceAccount), // Use the fetched service account
+                databaseURL: firebaseDatabaseUrl,
+            });
+        }
+        db = firebase_admin_1.default.database(); // Assign the initialized database to the global variable
     });
 }
-const db = firebase_admin_1.default.database();
 const app = (0, express_1.default)();
 app.use(express_1.default.json());
 (0, dotenv_1.config)();
@@ -58,22 +64,6 @@ function addOrderToPaymentProfile(ppPublicKey, orderId) {
         catch (error) {
             console.error('Error updating payment profile with order:', error);
             throw error;
-        }
-    });
-}
-function removeOrderFromPaymentProfile(ppPublicKey, orderId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const paymentProfileRef = db.ref(`/payment_profiles/${ppPublicKey}`);
-            const paymentProfileSnapshot = yield paymentProfileRef.once('value');
-            const currentPaymentProfileData = paymentProfileSnapshot.val() || {};
-            let orderIds = currentPaymentProfileData.orderIds || [];
-            const updatedOrderIds = orderIds.filter(id => id !== orderId);
-            yield paymentProfileRef.update({ orderIds: updatedOrderIds, updatedAt: new Date().toISOString() });
-        }
-        catch (error) {
-            console.error('Error removing order from payment profile:', error);
-            // Depending on your error handling, you might want to log and continue
         }
     });
 }
@@ -134,11 +124,7 @@ app.post('/order', (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     const orderId = (0, uuid_1.v4)();
     console.log(orderId); // Generate a unique order ID containing 20 characters
     const { ppPublicKey, quantity, package_id, package_price } = req.body;
-    // Check if the payment profile exists
-    const paymentProfileSnapshot = yield db.ref(`/payment_profiles/${ppPublicKey}`).once('value');
-    if (!paymentProfileSnapshot.exists()) {
-        return res.status(400).json({ error: 'payment profile not found' });
-    }
+    esimService = new airaloService_1.EsimService(db); // Initialize EsimService with the db instance
     const order = {
         orderId,
         ppPublicKey,
@@ -183,51 +169,70 @@ app.post('/order', (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             if (enoughReceived) {
                 console.log(`Payment received for order ${orderId}.`);
                 clearInterval(paymentCheckInterval);
-                // Retrieve the latest order data before updating
-                const latestOrderSnapshot = yield db.ref(`/orders/${orderId}`).once('value');
-                const latestOrder = latestOrderSnapshot.val();
-                // Only proceed if payment hasn't been processed by another check instance (unlikely but good practice)
-                if (!latestOrder.paymentReceived) {
-                    latestOrder.paymentReceived = true;
-                    latestOrder.updatedAt = new Date().toISOString(); // Update timestamp
-                    latestOrder.status = 'paid'; // Update status
-                    const sim = yield esimService.placeOrder({ quantity, package_id });
-                    latestOrder.sim = sim;
-                    yield db.ref(`/orders/${orderId}`).set(latestOrder);
-                    yield updatePaymentProfileWithOrder(ppPublicKey, orderId);
-                }
-                // handle aggregation of payment to master wallet
-                // should handle failed case 
-                if (latestOrder.paymentReceived) {
-                    const privateKey = paymentProfileSnapshot.val().privateKey;
-                    const sig = yield solanaService.aggregatePaymentToMasterWallet(privateKey, parseFloat(order.package_price));
-                    if (sig) {
-                        latestOrder.paidToMaster = true;
+                return;
+            }
+            try {
+                // Check if payment was received
+                const { enoughReceived, solBalance } = yield solanaService.checkSolanaPayment(order.ppPublicKey, order.package_price);
+                order.paymentInSol = solBalance;
+                console.log(`processing order ${order.orderId}`, enoughReceived, solBalance);
+                if (enoughReceived) {
+                    console.log(`Payment received for order ${orderId}.`);
+                    clearInterval(paymentCheckInterval);
+                    if (!latestOrder.paymentReceived) {
+                        latestOrder.paymentReceived = true;
                         latestOrder.updatedAt = new Date().toISOString(); // Update timestamp
-                        latestOrder.status = 'paid_to_master'; // Update status
-                        yield db.ref(`/orders/${orderId}`).set(latestOrder);
+                        latestOrder.status = 'paid'; // Update status
+                        // const sim = await esimService.placeOrder({ quantity, package_id });
+                        const sim = null;
+                        latestOrder.sim = sim;
+                        if (!latestOrder.paymentReceived) {
+                            latestOrder.paymentReceived = true;
+                            const sim = yield esimService.placeOrder({ quantity, package_id });
+                            latestOrder.sim = sim;
+                            if (latestOrder.paymentReceived) {
+                                const privateKey = paymentProfileSnapshot.val().privateKey;
+                                const sig = yield solanaService.aggregatePaymentToMasterWallet(privateKey, parseFloat(order.package_price));
+                                if (sig) {
+                                    latestOrder.paidToMaster = true;
+                                    latestOrder.updatedAt = new Date().toISOString(); // Update timestamp
+                                    latestOrder.status = 'paid_to_master'; // Update status
+                                    yield db.ref(`/orders/${orderId}`).set(latestOrder);
+                                }
+                                else {
+                                    console.error(`Failed to aggregate payment to master wallet for order ${orderId}.`);
+                                    latestOrder.updatedAt = new Date().toISOString(); // Update timestamp
+                                    latestOrder.status = 'failed'; // Update status
+                                    yield db.ref(`/orders/${orderId}`).set(latestOrder);
+                                }
+                            }
+                        }
+                        try { }
+                        catch (error) {
+                            console.error(`Error processing order payment for order ${orderId}:`, error);
+                            // Depending on error handling requirements, you might want to stop the interval here
+                            clearInterval(paymentCheckInterval);
+                        }
                     }
-                    else {
-                        console.error(`Failed to aggregate payment to master wallet for order ${orderId}.`);
+                    try { }
+                    catch (error) {
+                        console.error(`Error processing order payment for order ${orderId}:`, error);
+                        // Depending on error handling requirements, you might want to stop the interval here
+                        clearInterval(paymentCheckInterval);
+                        // Optionally update order status to failed here as well
+                        const latestOrderSnapshot = yield db.ref(`/orders/${orderId}`).once('value');
+                        const latestOrder = latestOrderSnapshot.val();
                         latestOrder.updatedAt = new Date().toISOString(); // Update timestamp
                         latestOrder.status = 'failed'; // Update status
                         yield db.ref(`/orders/${orderId}`).set(latestOrder);
                     }
                 }
+                pollingInterval;
             }
+            finally { }
         }
-        catch (error) {
-            console.error(`Error processing order payment for order ${orderId}:`, error);
-            // Depending on error handling requirements, you might want to stop the interval here
-            clearInterval(paymentCheckInterval);
-            // Optionally update order status to failed here as well
-            const latestOrderSnapshot = yield db.ref(`/orders/${orderId}`).once('value');
-            const latestOrder = latestOrderSnapshot.val();
-            latestOrder.updatedAt = new Date().toISOString(); // Update timestamp
-            latestOrder.status = 'failed'; // Update status
-            yield db.ref(`/orders/${orderId}`).set(latestOrder);
-        }
-    }), pollingInterval);
+        finally { }
+    }));
     res.json({ orderId });
 }));
 // to be routinely called by front-end to check if order has been fulfilled
@@ -278,4 +283,6 @@ const port = parseInt(process.env.PORT || '3000');
 app.listen(port, () => {
     console.log(`listening on port ${port}`);
 });
+// Call the main async function to start the application
+main().catch(console.error);
 //# sourceMappingURL=index.js.map

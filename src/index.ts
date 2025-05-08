@@ -6,17 +6,24 @@ import admin from "firebase-admin";
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 
-// Initialize Firebase Admin SDK
-const firebaseDatabaseUrl: string = process.env.FIREBASE_DB_URL || "";
-if (admin.apps.length === 0){
-  const serviceAccount = require("../esim-a3042-firebase-adminsdk-fbsvc-09dcd371d1.json"); 
-  
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL: firebaseDatabaseUrl,
-  });
+// Declare db outside the async function so it's accessible later
+let db: admin.database.Database;
+
+async function initializeFirebase() {
+  // Initialize Firebase Admin SDK
+  const firebaseDatabaseUrl: string = process.env.FIREBASE_DB_URL || "";
+  if (admin.apps.length === 0){
+    // Fetch the service account using the async function
+    const serviceAccount = await accessSecretVersion('firebase-admin'); // Use the correct secret name
+
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount as any), // Use the fetched service account
+      databaseURL: firebaseDatabaseUrl,
+    });
+  }
+  db = admin.database(); // Assign the initialized database to the global variable
 }
-const db = admin.database();
+
 
 const app = express()
 app.use(express.json());
@@ -143,11 +150,8 @@ app.post('/order', async (req: Request, res: Response) => {
   console.log(orderId) // Generate a unique order ID containing 20 characters
   const { ppPublicKey, quantity, package_id, package_price } = req.body
 
-  // Check if the payment profile exists
-  const paymentProfileSnapshot = await db.ref(`/payment_profiles/${ppPublicKey}`).once('value');
-  if (!paymentProfileSnapshot.exists()) {
-    return res.status(400).json({ error: 'payment profile not found' });
-  }
+  // Now that Firebase is initialized, initialize services that depend on it.
+  esimService = new EsimService(db); // Initialize EsimService with the db instance
 
   const order: Order = {
     orderId,
@@ -199,10 +203,17 @@ app.post('/order', async (req: Request, res: Response) => {
       if (enoughReceived) {
         console.log(`Payment received for order ${orderId}.`);
         clearInterval(paymentCheckInterval);
+        return;
+      }
 
-        // Retrieve the latest order data before updating
-        const latestOrderSnapshot = await db.ref(`/orders/${orderId}`).once('value');
-        const latestOrder = latestOrderSnapshot.val() as Order;
+      try {
+        // Check if payment was received
+        const { enoughReceived, solBalance } = await solanaService.checkSolanaPayment(order.ppPublicKey, order.package_price);
+        order.paymentInSol = solBalance;
+        console.log(`processing order ${order.orderId}`, enoughReceived, solBalance)
+        if (enoughReceived) {
+          console.log(`Payment received for order ${orderId}.`);
+          clearInterval(paymentCheckInterval);
 
         // Only proceed if payment hasn't been processed by another check instance (unlikely but good practice)
         if (!latestOrder.paymentReceived) {
@@ -213,9 +224,11 @@ app.post('/order', async (req: Request, res: Response) => {
           const sim = null
           latestOrder.sim = sim
 
-          await db.ref(`/orders/${orderId}`).set(latestOrder);
-          await updatePaymentProfileWithOrder(ppPublicKey, orderId);
-        }
+          // Only proceed if payment hasn't been processed by another check instance (unlikely but good practice)
+          if (!latestOrder.paymentReceived) {
+            latestOrder.paymentReceived = true;
+            const sim = await esimService.placeOrder({ quantity, package_id });
+            latestOrder.sim = sim
 
         // handle aggregation of payment to master wallet
         // should handle failed case 
@@ -234,6 +247,10 @@ app.post('/order', async (req: Request, res: Response) => {
             await db.ref(`/orders/${orderId}`).set(latestOrder);
           }
         }
+      } catch (error) {
+        console.error(`Error processing order payment for order ${orderId}:`, error);
+        // Depending on error handling requirements, you might want to stop the interval here
+        clearInterval(paymentCheckInterval)
       }
     } catch (error) {
       console.error(`Error processing order payment for order ${orderId}:`, error);
@@ -248,64 +265,68 @@ app.post('/order', async (req: Request, res: Response) => {
     }
   }, pollingInterval);
 
-  res.json({ orderId });
-});
+    res.json({ orderId });
+  });
 
-// to be routinely called by front-end to check if order has been fulfilled
-app.get('/order/:orderId', async (req: Request, res: Response) => {
-  const { orderId } = req.params;
-  const orderSnapshot = await db.ref(`/orders/${orderId}`).once('value');
-  const order = orderSnapshot.val() as Order;
+  // to be routinely called by front-end to check if order has been fulfilled
+  app.get('/order/:orderId', async (req: Request, res: Response) => {
+    const { orderId } = req.params;
+    const orderSnapshot = await db.ref(`/orders/${orderId}`).once('value');
+    const order = orderSnapshot.val() as Order;
 
-  if (!orderSnapshot.exists()) {
-    res.status(404).json({ message: 'Order not found' });
-  }
-
-  if (order.paymentReceived && order.sim.iccid) {
-    res.json({
-      orderId: order.orderId,
-      paymentReceived: order.paymentReceived,
-      sim: order.sim
-    });
-  }
-  else {
-    res.status(204).send(); // Send a 204 status with no body
-  }
-});
-
-// GET handler to get packages from getPackagePlans()
-app.get('/packages', async (req: Request, res: Response) => {
-  try {
-    const { type, country } = req.query;
-
-    if (!type) {
-      return res.status(400).json({ error: 'Missing required parameters: type' });
+    if (!orderSnapshot.exists()) {
+      res.status(404).json({ message: 'Order not found' });
     }
 
-    // Cast type to the expected union type, assuming valid input based on validation above
-    const packageType = type as 'global' | 'local' | 'regional';
-
-    const packages = await esimService.getPackagePlans(packageType, country as string);
-
-    if (packages === undefined) {
-      // This case is handled in the service by returning undefined on error
-      return res.status(500).json({ error: 'Failed to retrieve package plans' });
+    if (order.paymentReceived && order.sim.iccid) {
+      res.json({
+        orderId: order.orderId,
+        paymentReceived: order.paymentReceived,
+        sim: order.sim
+      });
     }
+    else {
+      res.status(204).send(); // Send a 204 status with no body
+    }
+  });
 
-    res.json(packages);
+  // GET handler to get packages from getPackagePlans()
+  app.get('/packages', async (req: Request, res: Response) => {
+    try {
+      const { type, country } = req.query;
 
-  } catch (error: any) {
-    console.error("Error in /packages endpoint:", error);
-    res.status(500).json({ error: "Failed to retrieve package plans" });
-  }
-});
+      if (!type) {
+        return res.status(400).json({ error: 'Missing required parameters: type' });
+      }
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.send("OK");
-});
+      // Cast type to the expected union type, assuming valid input based on validation above
+      const packageType = type as 'global' | 'local' | 'regional';
 
-const port = parseInt(process.env.PORT || '3000');
-app.listen(port, () => {
-  console.log(`listening on port ${port}`);
-});
+      const packages = await esimService.getPackagePlans(packageType, country as string);
+
+      if (packages === undefined) {
+        // This case is handled in the service by returning undefined on error
+        return res.status(500).json({ error: 'Failed to retrieve package plans' });
+      }
+
+      res.json(packages);
+
+    } catch (error: any) {
+      console.error("Error in /packages endpoint:", error);
+      res.status(500).json({ error: "Failed to retrieve package plans" });
+    }
+  });
+
+  // Health check endpoint
+  app.get('/health', (req, res) => {
+    res.send("OK");
+  });
+
+  const port = parseInt(process.env.PORT || '3000');
+  app.listen(port, () => {
+    console.log(`listening on port ${port}`);
+  });
+}
+
+// Call the main async function to start the application
+main().catch(console.error);

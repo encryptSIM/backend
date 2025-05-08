@@ -8,13 +8,38 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const airaloService_1 = require("../src/services/airaloService");
+const firebase_admin_1 = __importDefault(require("firebase-admin"));
+const secrets_1 = require("../src/secrets");
+const dotenv_1 = require("dotenv");
+(0, dotenv_1.config)();
+function initializeFirebase() {
+    return __awaiter(this, void 0, void 0, function* () {
+        // Initialize Firebase Admin SDK
+        const firebaseDatabaseUrl = process.env.FIREBASE_DB_URL || "";
+        console.log(firebaseDatabaseUrl);
+        if (firebase_admin_1.default.apps.length === 0) {
+            // Fetch the service account using the async function
+            const serviceAccount = yield (0, secrets_1.accessSecretVersion)('firebase-admin'); // Use the correct secret name
+            console.log(serviceAccount);
+            firebase_admin_1.default.initializeApp({
+                credential: firebase_admin_1.default.credential.cert(serviceAccount), // Use the fetched service account
+                databaseURL: firebaseDatabaseUrl,
+            });
+        }
+        return firebase_admin_1.default.database(); // Assign the initialized database to the global variable
+    });
+}
 describe("AiraloService", () => {
     let esimService;
-    beforeEach(() => {
-        esimService = new airaloService_1.EsimService();
-    });
+    beforeEach(() => __awaiter(void 0, void 0, void 0, function* () {
+        const db = yield initializeFirebase();
+        esimService = new airaloService_1.EsimService(db);
+    }));
     // This test now acts as an integration test, calling the actual service
     it("should call getPackagePlans successfully", () => __awaiter(void 0, void 0, void 0, function* () {
         // Note: This test requires a network connection and potentially valid API keys

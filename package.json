@@ -6,7 +6,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "npm run build && npm run start:dev",
-    "test": "jest --config jest.config.json",
+    "test": "jest --verbose --config jest.config.json",
     "build": "tsc",
     "start": "node dist/index.js",
     "start:dev": "./node_modules/.bin/ts-node-dev --respawn --transpile-only src/index.ts"
@@ -14,6 +14,7 @@
   "author": "Google LLC",
   "license": "Apache-2.0",
   "dependencies": {
+    "@google-cloud/secret-manager": "^6.0.1",
     "@montarist/airalo-api": "^1.0.4",
     "@solana/web3.js": "^1.90.0",
     "axios": "^1.6.7",

@@ -36,12 +36,10 @@ export interface ExportedAiraloPackage {
 
 export class EsimService{
   private db: admin.database.Database;
-  private firebaseDatabaseUrl: string;
   private airaloService: AiraloService;
 
-  constructor() {
-    this.firebaseDatabaseUrl = process.env.FIREBASE_DB_URL || "";
-    this.connectToFirebase();
+  constructor(db: admin.database.Database) {
+    this.db = db; // Receive the initialized db instance
 
     const clientId = process.env.AIRALO_CLIENT_ID;
     const clientSecret = process.env.AIRALO_CLIENT_SECRET;
@@ -60,17 +58,7 @@ export class EsimService{
     });
   }
 
-  public connectToFirebase(): void {
-    if (admin.apps.length === 0) {
-      const serviceAccount = require("../../esim-a3042-firebase-adminsdk-fbsvc-09dcd371d1.json");
-
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-        databaseURL: this.firebaseDatabaseUrl,
-      });
-    }
-    this.db = admin.database();
-  }
+  // Removed the connectToFirebase method
 
   public async placeOrder(
     orderDetails: OrderDetails

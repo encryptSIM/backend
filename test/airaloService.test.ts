@@ -1,11 +1,34 @@
 import { EsimService } from "../src/services/airaloService";
-import { AiraloPackage } from "@montarist/airalo-api";
+import admin from "firebase-admin";
+import { accessSecretVersion } from '../src/secrets';
+import { config } from "dotenv";
+
+config()
+
+async function initializeFirebase(): Promise<admin.database.Database> {
+  // Initialize Firebase Admin SDK
+  const firebaseDatabaseUrl: string = process.env.FIREBASE_DB_URL || "";
+  console.log(firebaseDatabaseUrl)
+  if (admin.apps.length === 0){
+    // Fetch the service account using the async function
+    const serviceAccount = await accessSecretVersion('firebase-admin'); // Use the correct secret name
+
+    console.log(serviceAccount)
+
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount as any), // Use the fetched service account
+      databaseURL: firebaseDatabaseUrl,
+    });
+  }
+  return admin.database(); // Assign the initialized database to the global variable
+}
 
 describe("AiraloService", () => {
   let esimService: EsimService;
 
-  beforeEach(() => {
-    esimService = new EsimService();
+  beforeEach(async () => {
+    const db = await initializeFirebase();
+    esimService = new EsimService(db);
   });
 
   // This test now acts as an integration test, calling the actual service
