@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { SolanaService } from './services/solanaService';
 import { AiraloWrapper, AiraloTopupOrder } from './services/airaloService';
 import { DBHandler } from './helper';
+import { MockTopupHandler } from '../test/mock/mockTopupHandler';
 
 export interface TopupOrder {
     orderId: string;
@@ -158,7 +159,9 @@ export class TopupHandler {
 
                 // if esim provisioned, pay to master
                 if (order.status === 'paid_to_master') {
-                    order = await this.provisionEsim(order);
+                    // order = await this.provisionEsim(order);
+                    const mockTopupHandler = new MockTopupHandler(this.db)
+                    order = await mockTopupHandler.provisionEsim(order)
                 }
 
                 // if paid to master, end this cycle
