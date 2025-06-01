@@ -27,6 +27,7 @@ export class OrderHandler {
   private paymentCheckDuration = 600000; // 10 minutes
   private pollingInterval = 30000; // Poll every 10 seconds
   private logger: GCloudLogger
+  private orderQueue: string[]; // In-memory queue to store order IDs
 
   constructor(
     db: admin.database.Database, 
@@ -39,6 +40,7 @@ export class OrderHandler {
     this.airaloWrapper = airaloWrapper;
     this.dbHandler = new DBHandler(this.db);
     this.logger = logger;
+    this.orderQueue = []; // Initialize the in-memory queue
   }
 
   public queryPPOrder = async (req: Request, res: Response) => {
@@ -142,15 +144,38 @@ export class OrderHandler {
       updatedAt: new Date().toISOString(),
       status: 'pending',
     };
+    
+    // Save the order in the orders collection
     await this.db.ref(`/orders/${orderId}`).set(order);
 
+    // Add the order ID to the in-memory queue
+    this.logger.logINFO(`Order ${orderId} added to in-memory queue. Current queue size: ${this.orderQueue.length}`);
+
+    // The existing setInterval logic is tied to the instance that received the request.
+    // In a multi-instance Cloud Run environment or with scaling to zero, this polling
+    // mechanism combined with an in-memory queue is unreliable as other instances
+    // won't process this order, and this instance might disappear.
+    // A persistent queue (like Pub/Sub) and a dedicated processor is the recommended pattern.
+    // However, as requested, keeping the polling for now.
+    this.paymentCheckInterval(orderId)
+
+    return res.json({
+      orderId,
+      paymentInSol
+    });
+  }
+
+  private paymentCheckInterval(orderId: string) {
     const startTime = Date.now();
     const paymentCheckInterval = setInterval(async () => {
       let order = await this.getOrder(orderId)
       // Check if the total duration has passed
       if (Date.now() - startTime > this.paymentCheckDuration) {
-        console.log(`Payment check duration exceeded for order ${orderId}. Stopping polling.`);
-        order = await this.updateOrderStatus(order, "failed")
+        this.logger.logINFO(`Payment check duration exceeded for order ${orderId} at status ${order.status}. Stopping polling.`);
+        if (order.status === 'pending') {
+          order = await this.updateOrderStatus(order, "failed")
+        }
+        // Potentially remove from queue here if you had a processing loop
         clearInterval(paymentCheckInterval);
         return;
       }
@@ -177,6 +202,7 @@ export class OrderHandler {
         // if esim provisioned, end this cycle
         if (order.status === 'esim_provisioned') {
           clearInterval(paymentCheckInterval);
+          // Potentially remove from queue here if you had a processing loop
         }
       }
       catch (error) {
@@ -184,13 +210,9 @@ export class OrderHandler {
         // Depending on error handling requirements, you might want to stop the interval here
         await this.setOrderError(orderId, error);
         clearInterval(paymentCheckInterval);
+        
       }
     }, this.pollingInterval)
-
-    return res.json({
-      orderId,
-      paymentInSol
-    });
   }
 
   // === HELPER FUNCTION ===
