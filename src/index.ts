@@ -1,10 +1,11 @@
-import express, { Request, Response } from 'express';
 import { config } from "dotenv";
-import { AiraloWrapper, AiraloTopupOrder, AiraloSIMTopup } from './services/airaloService';
-import { SolanaService } from './services/solanaService';
+import express, { Request, Response } from 'express';
 import admin from "firebase-admin";
 import { GCloudLogger, initializeFirebase } from './helper';
-import { OrderHandler } from './order-handler'; 
+import { OrderHandler } from './order-handler';
+import { AiraloSIMTopup, AiraloWrapper } from './services/airaloService';
+import { DVPNService } from "./services/dVPNService";
+import { SolanaService } from './services/solanaService';
 import { TopupHandler } from './topup-handler';
 
 // Declare db outside the async function so it's accessible later
@@ -22,9 +23,10 @@ interface PaymentProfile {
 
 let solanaService: SolanaService;
 let airaloWrapper: AiraloWrapper;
+let dVPNService: DVPNService;
 
 async function main() {
-  db = await initializeFirebase(); 
+  db = await initializeFirebase();
 
   const logger = new GCloudLogger();
   solanaService = new SolanaService(logger);
@@ -32,8 +34,152 @@ async function main() {
   airaloWrapper = new AiraloWrapper(db, logger);
   await airaloWrapper.initialize();
 
+  dVPNService = new DVPNService();
+
   const orderHandler = new OrderHandler(db, solanaService, airaloWrapper, logger);
   const topupHandler = new TopupHandler(db, solanaService, airaloWrapper, logger);
+
+  // === DVPN HANDLER ===
+
+  // Create device
+  app.post('/vpn/create-device', async (req, res) => {
+    try {
+      // create device
+      const deviceInfo = await dVPNService.createDevice();
+      logger.logINFO(`deviceInfo: ${JSON.stringify(deviceInfo)}`);
+
+      return res.json({
+        data: deviceInfo.data,
+      });
+    } catch (err) {
+      logger.logERROR(err?.response?.data || err);
+      res.status(500).json({ error: 'Failed to create device' });
+    }
+  });
+
+  // Get countries
+  app.get('/vpn/countries/:deviceToken', async (req, res) => {
+    try {
+      const { deviceToken } = req.params;
+
+      // find countries
+      const countries = await dVPNService.getCountries(deviceToken);
+      logger.logINFO(`countries: ${JSON.stringify(countries)}`);
+      if (countries.data.length === 0) return res.status(404).json({ error: 'No countries found' });
+
+      return res.json({
+        data: countries.data,
+      });
+    } catch (err) {
+      logger.logERROR(err?.response?.data || err);
+      res.status(500).json({ error: 'Failed to get countries' });
+    }
+  });
+
+  // Get cities
+  // Route: /vpn/cities/:countryId?deviceToken=abc123
+  app.get('/vpn/cities/:countryId', async (req, res) => {
+    try {
+      const { countryId } = req.params;
+      const { deviceToken } = req.query;
+
+      if (!deviceToken) return res.status(400).json({ error: 'Missing deviceToken' });
+
+      const cities = await dVPNService.getCities(deviceToken as string, countryId);
+      logger.logINFO(`cities: ${JSON.stringify(cities)}`);
+
+      if (cities.data.length === 0)
+        return res.status(404).json({ error: 'No cities found' });
+
+      return res.json({ data: cities.data });
+    } catch (err) {
+      logger.logERROR(err?.response?.data || err);
+      res.status(500).json({ error: 'Failed to get cities' });
+    }
+  });
+
+  // Get servers
+  // Route: /vpn/servers/:cityId?deviceToken=abc123
+  app.get('/vpn/servers/:cityId', async (req, res) => {
+    try {
+      const { cityId } = req.params;
+      const { deviceToken } = req.query;
+
+      if (!deviceToken) return res.status(400).json({ error: 'Missing deviceToken' });
+
+      // find servers
+      const servers = await dVPNService.getServers(deviceToken as string, cityId);
+      logger.logINFO(`servers: ${JSON.stringify(servers)}`);
+      if (servers.data.length === 0) return res.status(404).json({ error: 'No servers found' });
+
+      return res.json({ data: servers.data });
+    } catch (err) {
+      logger.logERROR(err?.response?.data || err);
+      res.status(500).json({ error: 'Failed to get cities' });
+    }
+  });
+
+  // Create server credentials
+  // Route: /vpn/create-credentials/:serverId?deviceToken=abc123
+  app.post('/vpn/create-credentials/:serverId', async (req, res) => {
+    try {
+      const { serverId } = req.params;
+      const { deviceToken } = req.query;
+
+      if (!deviceToken) return res.status(400).json({ error: 'Missing deviceToken' });
+
+      const credentials = await dVPNService.createServerCredentials(deviceToken as string, serverId);
+      logger.logINFO(`credentials: ${JSON.stringify(credentials)}`);
+
+      const configText = dVPNService.buildWireGuardConf(credentials.data);
+      logger.logINFO(`configText: ${JSON.stringify(configText)}`);
+
+      return res.json({
+        credentials: credentials,
+        config: configText,
+      });
+    } catch (err) {
+      logger.logERROR(err?.response?.data || err);
+      res.status(500).json({ error: 'Failed to get cities' });
+    }
+  });
+
+  // Get all config to active VPN
+  app.post('/vpn/active', async (req, res) => {
+    try {
+      // create device
+      const deviceInfo = await dVPNService.createDevice();
+
+      // find countries
+      const deviceToken = deviceInfo.data.token;
+      const countries = await dVPNService.getCountries(deviceToken);
+      if (countries.data.length === 0) return res.status(404).json({ error: 'No countries found' });
+
+      // find cities
+      const randomCountry = countries.data[Math.floor(Math.random() * countries.data.length)];
+      const cities = await dVPNService.getCities(deviceToken, randomCountry.id);
+      if (cities.data.length === 0) return res.status(404).json({ error: 'No cities found' });
+
+      // find servers
+      const randomCity = cities.data[Math.floor(Math.random() * cities.data.length)];
+      const servers = await dVPNService.getServers(deviceToken, randomCity.id);
+      if (servers.data.length === 0) return res.status(404).json({ error: 'No servers found' });
+
+      const randomServer = servers.data[Math.floor(Math.random() * servers.data.length)];
+      const credentials = await dVPNService.createServerCredentials(deviceToken, randomServer.id);
+
+      const configWireGuard = dVPNService.buildWireGuardConf(credentials.data);
+      logger.logINFO(`configWireGuard: ${JSON.stringify(configWireGuard)}`);
+      return res.json({
+        deviceToken: deviceToken,
+        raw: credentials,
+        configWireGuard: configWireGuard,
+      });
+    } catch (err) {
+      logger.logERROR(err?.response?.data || err);
+      res.status(500).json({ error: 'Failed to get VPN configuration' });
+    }
+  });
 
   // === PAYMENT PROFILE HANDLER ===
 
@@ -51,7 +197,7 @@ async function main() {
       // Log error to Firebase
       return res.status(500).json({ error: "Failed to create payment profile" });
     }
-  });  
+  });
 
   // === ORDER HANDLER ===
   app.post('/order', orderHandler.createOrder);
@@ -88,7 +234,7 @@ async function main() {
     } catch (error: any) {
       logger.logERROR(`Error getting top-ups for ICCID ${req.params.iccid}: ${error}`);
       const errorMessage = error.message || "Failed to retrieve SIM top-ups";
-       // Log error to Firebase
+      // Log error to Firebase
       return res.status(500).json({ error: errorMessage });
     }
   });
@@ -134,19 +280,19 @@ async function main() {
 
       if (packages === undefined) {
         // This case is handled in the service by returning undefined on error
-         // Log error to Firebase
+        // Log error to Firebase
         return res.status(500).json({ error: 'Failed to retrieve package plans' });
       }
 
       return res.json(packages);
     } catch (error: any) {
       logger.logERROR(`Error in /packages endpoint: ${error}`);
-       // Log error to Firebase
+      // Log error to Firebase
       return res.status(500).json({ error: "Failed to retrieve package plans" });
     }
   });
 
-  
+
 
   // Endpoint to log errors from the frontend or other sources
   app.post('/error', async (req: Request, res: Response) => {
@@ -155,18 +301,18 @@ async function main() {
       const errorLog = {
         message: message
       };
-      
+
       // Save error log to Firebase
       const timestamp = new Date().toISOString();
       const timestampKey = timestamp.replace(/[^a-zA-Z0-9]/g, '_'); // Create a valid key
       await db.ref(`/error_logs/${timestampKey}`).set(errorLog);
 
       logger.logINFO(`error logged: ${message}`)
-      
+
       return res.status(200).send("OK")
     } catch (error: any) {
       logger.logERROR(`Error processing error log request: ${error}`);
-       // Log error about the logging process itself
+      // Log error about the logging process itself
       return res.status(500).json({ success: false, message: "Failed to process log request" });
     }
   });
