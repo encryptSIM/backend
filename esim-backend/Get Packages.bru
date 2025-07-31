@@ -1,0 +1,19 @@
+meta {
+  name: Get Packages
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base}}/packages?type=local
+  body: none
+  auth: inherit
+}
+
+params:query {
+  type: local
+}
+
+settings {
+  encodeUrl: true
+}
