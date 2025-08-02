@@ -1,14 +1,16 @@
 import axios from "axios";
+import { Result, ResultAsync } from "neverthrow"
 import { config } from "dotenv";
 import express, { Request, Response } from 'express';
 import admin from "firebase-admin";
 import qs from "querystring";
 import { GCloudLogger, initializeFirebase } from './helper';
 import { OrderHandler } from './order-handler';
-import { AiraloSIMTopup, AiraloWrapper } from './services/airaloService';
+import { AiraloSIMTopup, AiraloWrapper, OrderDetailsSchema } from './services/airaloService';
 import { DVPNService } from "./services/dVPNService";
 import { SolanaService } from './services/solanaService';
 import { TopupHandler } from './topup-handler';
+import z from "zod";
 
 // Declare db outside the async function so it's accessible later
 let db: admin.database.Database;
@@ -41,6 +43,81 @@ async function main() {
   const orderHandler = new OrderHandler(db, solanaService, airaloWrapper, logger);
   const topupHandler = new TopupHandler(db, solanaService, airaloWrapper, logger);
 
+  app.get("/complete-order", async (req, res) => {
+    const CompleteOrderBodySchema = z.object({
+      orders: OrderDetailsSchema.array(),
+      id: z.string(),
+    });
+
+    const parseResult = CompleteOrderBodySchema.safeParse(req?.body)
+
+    if (parseResult.error) {
+      logger.logERROR(JSON.stringify(parseResult.error, null, 2));
+      return res.status(400).json({
+        success: false,
+        message: "Bad request",
+        error: z.treeifyError(parseResult.error),
+      });
+    }
+
+    const { orders, id } = parseResult.data;
+
+    const placeOrderResults = await Promise.all(
+      orders.map((order) =>
+        ResultAsync.fromPromise(airaloWrapper.placeOrder(order), (error) => error)
+      )
+    );
+
+    const failedOrders = placeOrderResults.filter((result) => result.isErr());
+    if (failedOrders.length > 0) {
+      logger.logERROR(JSON.stringify({
+        message: "Failed to place some orders",
+        data: {
+          failedOrders: failedOrders.map((result) => result.error),
+        }
+      }, null, 2));
+      return res.status(500).json({
+        success: false,
+        message: "Failed to place some orders",
+        errors: failedOrders.map((result) => result.error),
+      });
+    }
+
+    const sims = placeOrderResults.map((result) => {
+      if (result.isOk()) return result.value
+      return null
+    }).filter(t => !!t)
+
+    const simsObject = sims.reduce((acc, sim) => {
+      acc[sim.iccid] = sim;
+      return acc;
+    }, {});
+
+    const updateResult = await ResultAsync.fromPromise(
+      db.ref(`sims/${id}`).update(simsObject),
+      (error) => error
+    );
+
+    if (updateResult.isErr()) {
+      logger.logERROR(JSON.stringify({
+        message: "Failed to update SIMs in the database",
+        data: {
+          error: updateResult.error,
+        }
+      }, null, 2));
+      return res.status(500).json({
+        success: false,
+        message: "Failed to update SIMs in the database",
+        error: updateResult.error,
+      });
+    }
+
+    logger.logINFO(JSON.stringify({
+      message: "Order completed successfully",
+      data: { id, sims }
+    }, null, 2));
+    return res.status(200).json({ success: true, message: "Order completed" });
+  });
   app.get("/airalo/token", async (req, res) => {
     const AIRALO_CLIENT_ID = process.env.AIRALO_CLIENT_ID;
     const AIRALO_CLIENT_SECRET = process.env.AIRALO_CLIENT_SECRET;
