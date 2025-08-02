@@ -126,3 +126,4 @@ export class GCloudLogger {
 
     log.write(entry);
   }
+}
