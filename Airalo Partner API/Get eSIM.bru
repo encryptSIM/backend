@@ -1,0 +1,20 @@
+meta {
+  name: Get eSIM
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/v2/sims/:sim_iccid
+  body: none
+  auth: none
+}
+
+params:query {
+  ~include: 
+}
+
+headers {
+  ~Accept: 
+  ~Authorization: 
+}

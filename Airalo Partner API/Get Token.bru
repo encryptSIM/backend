@@ -1,0 +1,27 @@
+meta {
+  name: Get Token
+  type: http
+  seq: 26
+}
+
+post {
+  url: {{baseUrl}}/v2/token
+  body: multipartForm
+  auth: inherit
+}
+
+body:json {
+  {
+    "client"
+  }
+}
+
+body:multipart-form {
+  client_id: {{client_id}}
+  client_secret: {{client_secret}}
+  grant_type: grant_type
+}
+
+settings {
+  encodeUrl: true
+}

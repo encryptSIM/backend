@@ -1,0 +1,24 @@
+meta {
+  name: Get Packages
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/v2/packages
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~filter[type]: 
+  ~filter[country]: 
+  ~limit: 
+  ~page: 
+  ~include: 
+}
+
+headers {
+  ~Accept: 
+  ~Authorization: 
+}

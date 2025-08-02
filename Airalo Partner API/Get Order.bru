@@ -1,0 +1,20 @@
+meta {
+  name: Get Order
+  type: http
+  seq: 27
+}
+
+get {
+  url: {{baseUrl}}/v1/orders/:order_id
+  body: none
+  auth: none
+}
+
+params:query {
+  ~include: 
+}
+
+headers {
+  ~Accept: 
+  ~Authorization: 
+}

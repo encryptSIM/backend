@@ -1,0 +1,27 @@
+meta {
+  name: Get Order List
+  type: http
+  seq: 25
+}
+
+get {
+  url: {{baseUrl}}/v1/orders
+  body: none
+  auth: none
+}
+
+params:query {
+  ~include: 
+  ~filter[created_at]: 
+  ~filter[code]: 
+  ~filter[order_status]: 
+  ~filter[iccid]: 
+  ~filter[description]: 
+  ~limit: 
+  ~page: 
+}
+
+headers {
+  ~Accept: 
+  ~Authorization: 
+}

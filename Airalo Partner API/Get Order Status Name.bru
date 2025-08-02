@@ -1,0 +1,16 @@
+meta {
+  name: Get Order Status Name
+  type: http
+  seq: 36
+}
+
+get {
+  url: {{baseUrl}}/v1/orders/statuses/:slug
+  body: none
+  auth: none
+}
+
+headers {
+  ~Accept: 
+  ~Authorization: 
+}
