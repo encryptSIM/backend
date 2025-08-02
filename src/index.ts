@@ -118,6 +118,77 @@ async function main() {
     }, null, 2));
     return res.status(200).json({ success: true, message: "Order completed" });
   });
+
+  app.get("/fetch-sims/:id", async (req, res) => {
+    const { id } = req.params;
+
+    if (!id) {
+      const errorMessage = {
+        message: "Missing ID in request parameters",
+      };
+      logger.logERROR(JSON.stringify(errorMessage, null, 2));
+      return res.status(400).json({
+        success: false,
+        message: errorMessage.message,
+      });
+    }
+
+    const fetchResult = await ResultAsync.fromPromise(
+      db.ref(`sims/${id}`).once("value"),
+      (error) => error
+    );
+
+    if (fetchResult.isErr()) {
+      logger.logERROR(
+        JSON.stringify(
+          {
+            message: "Failed to fetch SIMs from the database",
+            data: { id, error: fetchResult.error },
+          },
+          null,
+          2
+        )
+      );
+      return res.status(500).json({
+        success: false,
+        message: "Failed to fetch SIMs from the database",
+        error: fetchResult.error,
+      });
+    }
+
+    const simsSnapshot = fetchResult.value;
+
+    if (!simsSnapshot.exists()) {
+      const warningMessage = {
+        message: "No SIMs found for the given ID",
+        data: { id },
+      };
+      logger.logINFO(JSON.stringify(warningMessage, null, 2));
+      return res.status(404).json({
+        success: false,
+        message: warningMessage.message,
+      });
+    }
+
+    const sims = simsSnapshot.val();
+
+    logger.logINFO(
+      JSON.stringify(
+        {
+          message: "SIMs fetched successfully",
+          data: { id, sims },
+        },
+        null,
+        2
+      )
+    );
+    return res.status(200).json({
+      success: true,
+      message: "SIMs fetched successfully",
+      data: sims,
+    });
+  });
+
   app.get("/airalo/token", async (req, res) => {
     const AIRALO_CLIENT_ID = process.env.AIRALO_CLIENT_ID;
     const AIRALO_CLIENT_SECRET = process.env.AIRALO_CLIENT_SECRET;
