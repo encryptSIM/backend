@@ -1,16 +1,14 @@
+import axios from "axios";
 import { config } from "dotenv";
-import qs from "querystring";
 import express, { Request, Response } from 'express';
 import admin from "firebase-admin";
+import qs from "querystring";
 import { GCloudLogger, initializeFirebase } from './helper';
 import { OrderHandler } from './order-handler';
 import { AiraloSIMTopup, AiraloWrapper } from './services/airaloService';
 import { DVPNService } from "./services/dVPNService";
 import { SolanaService } from './services/solanaService';
 import { TopupHandler } from './topup-handler';
-import { fetchClient } from "./airalo-api/api";
-import { request } from "http";
-import axios from "axios";
 
 // Declare db outside the async function so it's accessible later
 let db: admin.database.Database;
