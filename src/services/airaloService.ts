@@ -2,6 +2,7 @@ import { config } from "dotenv";
 import { AiraloService, AiraloPackage } from "@montarist/airalo-api";
 import * as admin from "firebase-admin";
 import { accessSecretValue, GCloudLogger } from "../helper";
+import z from "zod";
 config();
 
 export interface SimOrder {
@@ -12,11 +13,11 @@ export interface SimOrder {
   direct_apple_installation_url?: string;
 }
 
-export interface OrderDetails {
-  quantity: number;
-  package_id: string;
-}
-
+export const OrderDetailsSchema = z.object({
+  quantity: z.number().min(1).max(50),
+  package_id: z.string().min(1)
+})
+export type OrderDetails = z.infer<typeof OrderDetailsSchema>
 // Assumed interface for parameters to create a top-up order
 export interface AiraloTopupOrderParams {
   iccid: string;
