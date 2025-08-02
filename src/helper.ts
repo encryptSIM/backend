@@ -6,7 +6,7 @@ const client = new SecretManagerServiceClient();
 
 export async function accessSecretJSON(secretName: string, versionId = 'latest'): Promise<any> {
   const [version] = await client.accessSecretVersion({
-    name: `projects/esim-a3042/secrets/${secretName}/versions/${versionId}`,
+    name: `projects/${process.env.GCLOUD_PROJ_ID}/secrets/${secretName}/versions/${versionId}`,
   });
 
   const payload = version.payload?.data?.toString();
@@ -18,7 +18,7 @@ export async function accessSecretJSON(secretName: string, versionId = 'latest')
 
 export async function accessSecretValue(secretName: string, versionId = 'latest'): Promise<string> {
   const [version] = await client.accessSecretVersion({
-    name: `projects/esim-a3042/secrets/${secretName}/versions/${versionId}`,
+    name: `projects/${process.env.GCLOUD_PROJ_ID}/secrets/${secretName}/versions/${versionId}`,
   });
 
   const payload = version.payload?.data?.toString();
@@ -31,7 +31,7 @@ export async function accessSecretValue(secretName: string, versionId = 'latest'
 export async function initializeFirebase(): Promise<admin.database.Database> {
   // Initialize Firebase Admin SDK
   const firebaseDatabaseUrl: string = process.env.FIREBASE_DB_URL
-  if (admin.apps.length === 0){
+  if (admin.apps.length === 0) {
     // Fetch the service account using the async function
     const serviceAccount = await accessSecretJSON('firebase-admin'); // Use the correct secret name
 
@@ -57,7 +57,7 @@ export class DBHandler {
   public async getPaymentProfile(ppPublicKey: string): Promise<any> {
     const ppSnapshot = await this.db.ref(`/payment_profiles/${ppPublicKey}`).once('value');
     const pp = ppSnapshot.val()
-  
+
     return pp
   }
 
@@ -65,13 +65,13 @@ export class DBHandler {
     const ppRef = this.db.ref(`/payment_profiles/${ppPublicKey}`);
     const ppSnapshot = await ppRef.once('value');
     const pp = ppSnapshot.val();
-    
+
     let orderIds: string[] = [];
 
     if (pp && pp.orderIds) {
       orderIds = pp.orderIds;
     }
-    
+
     orderIds.push(order_id);
 
     await ppRef.update({ orderIds });

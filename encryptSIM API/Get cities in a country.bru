@@ -1,0 +1,19 @@
+meta {
+  name: Get cities in a country
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/vpn/cities/:countryId
+  body: none
+  auth: none
+}
+
+params:query {
+  deviceToken: 
+}
+
+params:path {
+  countryId: 
+}

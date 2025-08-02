@@ -1,0 +1,17 @@
+meta {
+  name: Get Installation instructions
+  type: http
+  seq: 31
+}
+
+get {
+  url: {{baseUrl}}/v1/sims/:sim_iccid/instructions
+  body: none
+  auth: none
+}
+
+headers {
+  ~Accept: 
+  ~Authorization: 
+  ~Accept-Language: 
+}

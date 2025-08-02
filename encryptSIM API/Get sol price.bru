@@ -1,0 +1,20 @@
+meta {
+  name: Get sol price
+  type: http
+  seq: 21
+}
+
+get {
+  url: https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ids: solana
+  vs_currencies: usd
+}
+
+settings {
+  encodeUrl: true
+}

@@ -1,0 +1,23 @@
+meta {
+  name: Webhook Simulator
+  type: http
+  seq: 40
+}
+
+post {
+  url: {{baseUrl}}/v1/simulator/webhook
+  body: json
+  auth: none
+}
+
+headers {
+  ~Authorization: 
+}
+
+body:json {
+  {
+    "event": "",
+    "type": "",
+    "iccid": ""
+  }
+}

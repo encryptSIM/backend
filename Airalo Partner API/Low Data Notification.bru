@@ -1,0 +1,23 @@
+meta {
+  name: Low Data Notification
+  type: http
+  seq: 39
+}
+
+post {
+  url: {{baseUrl}}/v1/notifications/opt-in
+  body: json
+  auth: none
+}
+
+headers {
+  ~Accept: 
+  ~Authorization: 
+}
+
+body:json {
+  {
+    "type": "",
+    "webhook_url": ""
+  }
+}

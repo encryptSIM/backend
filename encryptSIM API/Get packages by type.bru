@@ -1,0 +1,16 @@
+meta {
+  name: Get packages by type
+  type: http
+  seq: 17
+}
+
+get {
+  url: {{baseUrl}}/packages?type=global
+  body: none
+  auth: none
+}
+
+params:query {
+  type: global
+  ~country: 
+}

@@ -1,0 +1,23 @@
+meta {
+  name: Async Orders
+  type: http
+  seq: 18
+}
+
+post {
+  url: {{baseUrl}}/v2/notifications/opt-in
+  body: json
+  auth: none
+}
+
+headers {
+  ~Accept: 
+  ~Authorization: 
+}
+
+body:json {
+  {
+    "type": "",
+    "webhook_url": ""
+  }
+}

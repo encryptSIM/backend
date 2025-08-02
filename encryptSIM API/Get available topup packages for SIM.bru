@@ -1,0 +1,15 @@
+meta {
+  name: Get available topup packages for SIM
+  type: http
+  seq: 15
+}
+
+get {
+  url: {{baseUrl}}/sim/:iccid/topups
+  body: none
+  auth: none
+}
+
+params:path {
+  iccid: 
+}

@@ -1,0 +1,16 @@
+meta {
+  name: Update eSIM Brand
+  type: http
+  seq: 14
+}
+
+put {
+  url: {{baseUrl}}/v2/sims/:sim_iccid/brand
+  body: none
+  auth: none
+}
+
+headers {
+  ~Accept: 
+  ~Authorization: 
+}

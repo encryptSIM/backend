@@ -1,0 +1,15 @@
+meta {
+  name: Query payment profile SIM orders
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{baseUrl}}/payment-profile/sim/:ppPublicKey
+  body: none
+  auth: none
+}
+
+params:path {
+  ppPublicKey: 
+}

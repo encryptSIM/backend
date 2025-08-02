@@ -1,0 +1,16 @@
+meta {
+  name: Get  eSIM Package History
+  type: http
+  seq: 34
+}
+
+get {
+  url: {{baseUrl}}/v1/sims/:iccid/packages
+  body: none
+  auth: none
+}
+
+headers {
+  ~Accept: 
+  ~Authorization: 
+}

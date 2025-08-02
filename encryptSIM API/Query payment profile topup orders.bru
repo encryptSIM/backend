@@ -1,0 +1,15 @@
+meta {
+  name: Query payment profile topup orders
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/payment-profile/topup/:ppPublicKey
+  body: none
+  auth: none
+}
+
+params:path {
+  ppPublicKey: 
+}

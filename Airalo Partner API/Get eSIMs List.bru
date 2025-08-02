@@ -1,0 +1,24 @@
+meta {
+  name: Get eSIMs List
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/v2/sims
+  body: none
+  auth: none
+}
+
+params:query {
+  ~include: 
+  ~filter[created_at]: 
+  ~filter[iccid]: 
+  ~limit: 
+  ~page: 
+}
+
+headers {
+  ~Accept: 
+  ~Authorization: 
+}

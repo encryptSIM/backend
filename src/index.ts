@@ -1,6 +1,8 @@
+import axios from "axios";
 import { config } from "dotenv";
 import express, { Request, Response } from 'express';
 import admin from "firebase-admin";
+import qs from "querystring";
 import { GCloudLogger, initializeFirebase } from './helper';
 import { OrderHandler } from './order-handler';
 import { AiraloSIMTopup, AiraloWrapper } from './services/airaloService';
@@ -38,6 +40,43 @@ async function main() {
 
   const orderHandler = new OrderHandler(db, solanaService, airaloWrapper, logger);
   const topupHandler = new TopupHandler(db, solanaService, airaloWrapper, logger);
+
+  app.get("/airalo/token", async (req, res) => {
+    const AIRALO_CLIENT_ID = process.env.AIRALO_CLIENT_ID;
+    const AIRALO_CLIENT_SECRET = process.env.AIRALO_CLIENT_SECRET;
+
+    if (!AIRALO_CLIENT_ID || !AIRALO_CLIENT_SECRET) {
+      return res.status(500).json({
+        error: "Airalo client ID or secret not configured in environment variables.",
+      });
+    }
+
+    const requestBody = qs.stringify({
+      client_id: AIRALO_CLIENT_ID,
+      client_secret: AIRALO_CLIENT_SECRET,
+      grant_type: "client_credentials",
+    });
+
+    const options = {
+      method: "POST",
+      url: "https://partners-api.airalo.com/v2/token",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      data: requestBody,
+    };
+
+    try {
+      const { data } = await axios.request(options);
+      console.log("Airalo Token Response:", data);
+      return res.status(200).json(data);
+    } catch (error) {
+      console.error("Error fetching Airalo token:", error.response ? error.response.data : error.message);
+
+      return res.status(error.response ? error.response.status : 500).json({
+        error: "Failed to obtain Airalo token",
+        details: error.response ? error.response.data : error.message,
+      });
+    }
+  });
 
   // === DVPN HANDLER ===
 
