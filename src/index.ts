@@ -6,11 +6,11 @@ import admin from "firebase-admin";
 import qs from "querystring";
 import { GCloudLogger, initializeFirebase } from './helper';
 import { OrderHandler } from './order-handler';
-import { AiraloSIMTopup, AiraloWrapper, OrderDetailsSchema } from './services/airaloService';
+import { AiraloSIMTopup, AiraloWrapper, generateFakeSimsFromOrders, OrderDetailsSchema } from './services/airaloService';
 import { DVPNService } from "./services/dVPNService";
 import { SolanaService } from './services/solanaService';
 import { TopupHandler } from './topup-handler';
-import z from "zod";
+import z, { success } from "zod";
 
 // Declare db outside the async function so it's accessible later
 let db: admin.database.Database;
@@ -43,16 +43,17 @@ async function main() {
   const orderHandler = new OrderHandler(db, solanaService, airaloWrapper, logger);
   const topupHandler = new TopupHandler(db, solanaService, airaloWrapper, logger);
 
-  app.get("/complete-order", async (req, res) => {
+
+  app.post("/complete-order", async (req, res) => {
     const CompleteOrderBodySchema = z.object({
       orders: OrderDetailsSchema.array(),
       id: z.string(),
     });
 
-    const parseResult = CompleteOrderBodySchema.safeParse(req?.body)
+    const parseResult = CompleteOrderBodySchema.safeParse(req?.body);
 
     if (parseResult.error) {
-      logger.logERROR(JSON.stringify(parseResult.error, null, 2));
+      console.error(JSON.stringify(parseResult.error, null, 2));
       return res.status(400).json({
         success: false,
         message: "Bad request",
@@ -62,31 +63,48 @@ async function main() {
 
     const { orders, id } = parseResult.data;
 
-    const placeOrderResults = await Promise.all(
-      orders.map((order) =>
-        ResultAsync.fromPromise(airaloWrapper.placeOrder(order), (error) => error)
-      )
-    );
+    let sims;
 
-    const failedOrders = placeOrderResults.filter((result) => result.isErr());
-    if (failedOrders.length > 0) {
-      logger.logERROR(JSON.stringify({
-        message: "Failed to place some orders",
-        data: {
-          failedOrders: failedOrders.map((result) => result.error),
-        }
-      }, null, 2));
-      return res.status(500).json({
-        success: false,
-        message: "Failed to place some orders",
-        errors: failedOrders.map((result) => result.error),
-      });
+    if (process.env.MOCK_COMPLETE_ORDER_ENABLED === "true") {
+      sims = generateFakeSimsFromOrders(orders);
+    } else {
+      const placeOrderResults = await Promise.all(
+        orders.map((order) =>
+          ResultAsync.fromPromise(
+            airaloWrapper.placeOrder(order),
+            (error) => error
+          )
+        )
+      );
+
+      const failedOrders = placeOrderResults.filter((result) => result.isErr());
+      if (failedOrders.length > 0) {
+        console.error(
+          JSON.stringify(
+            {
+              message: "Failed to place some orders",
+              data: {
+                failedOrders: failedOrders.map((result) => result.error),
+              },
+            },
+            null,
+            2
+          )
+        );
+        return res.status(500).json({
+          success: false,
+          message: "Failed to place some orders",
+          errors: failedOrders.map((result) => result.error),
+        });
+      }
+
+      sims = placeOrderResults
+        .map((result) => {
+          if (result.isOk()) return result.value;
+          return null;
+        })
+        .filter((t) => !!t);
     }
-
-    const sims = placeOrderResults.map((result) => {
-      if (result.isOk()) return result.value
-      return null
-    }).filter(t => !!t)
 
     const simsObject = sims.reduce((acc, sim) => {
       acc[sim.iccid] = sim;
@@ -99,12 +117,18 @@ async function main() {
     );
 
     if (updateResult.isErr()) {
-      logger.logERROR(JSON.stringify({
-        message: "Failed to update SIMs in the database",
-        data: {
-          error: updateResult.error,
-        }
-      }, null, 2));
+      console.error(
+        JSON.stringify(
+          {
+            message: "Failed to update SIMs in the database",
+            data: {
+              error: updateResult.error,
+            },
+          },
+          null,
+          2
+        )
+      );
       return res.status(500).json({
         success: false,
         message: "Failed to update SIMs in the database",
@@ -112,11 +136,17 @@ async function main() {
       });
     }
 
-    logger.logINFO(JSON.stringify({
-      message: "Order completed successfully",
-      data: { id, sims }
-    }, null, 2));
-    return res.status(200).json({ success: true, message: "Order completed" });
+    console.info(
+      JSON.stringify(
+        {
+          message: "Order completed successfully",
+          data: { id, sims },
+        },
+        null,
+        2
+      )
+    );
+    return res.status(200).json({ success: true, message: "Order completed", sims });
   });
 
   app.get("/fetch-sims/:id", async (req, res) => {
@@ -126,7 +156,7 @@ async function main() {
       const errorMessage = {
         message: "Missing ID in request parameters",
       };
-      logger.logERROR(JSON.stringify(errorMessage, null, 2));
+      console.error(JSON.stringify(errorMessage, null, 2));
       return res.status(400).json({
         success: false,
         message: errorMessage.message,
@@ -139,7 +169,7 @@ async function main() {
     );
 
     if (fetchResult.isErr()) {
-      logger.logERROR(
+      console.error(
         JSON.stringify(
           {
             message: "Failed to fetch SIMs from the database",
@@ -163,7 +193,7 @@ async function main() {
         message: "No SIMs found for the given ID",
         data: { id },
       };
-      logger.logINFO(JSON.stringify(warningMessage, null, 2));
+      console.info(JSON.stringify(warningMessage, null, 2));
       return res.status(404).json({
         success: false,
         message: warningMessage.message,
@@ -172,7 +202,7 @@ async function main() {
 
     const sims = simsSnapshot.val();
 
-    logger.logINFO(
+    console.info(
       JSON.stringify(
         {
           message: "SIMs fetched successfully",
@@ -185,7 +215,7 @@ async function main() {
     return res.status(200).json({
       success: true,
       message: "SIMs fetched successfully",
-      data: sims,
+      data: Object.values(sims),
     });
   });
 
@@ -207,7 +237,7 @@ async function main() {
 
     const options = {
       method: "POST",
-      url: "https://partners-api.airalo.com/v2/token",
+      url: `${process.env.AIRALO_CLIENT_URL}/v2/token`,
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       data: requestBody,
     };
