@@ -1,0 +1,23 @@
+meta {
+  name: Complete an order and save SIMs to the database
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/complete-order
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "orders": [
+      {
+        "icxcid": "",
+        "otherData": ""
+      }
+    ],
+    "id": ""
+  }
+}

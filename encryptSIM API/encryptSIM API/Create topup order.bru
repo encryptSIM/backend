@@ -1,0 +1,19 @@
+meta {
+  name: Create topup order
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/topup
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "iccid": "",
+    "topupPackageId": "",
+    "ppPublicKey": ""
+  }
+}

@@ -1,0 +1,15 @@
+meta {
+  name: Fetch SIMs for a given user ID
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/fetch-sims/:id
+  body: none
+  auth: none
+}
+
+params:path {
+  id: 
+}

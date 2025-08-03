@@ -1,0 +1,17 @@
+meta {
+  name: Log error
+  type: http
+  seq: 18
+}
+
+post {
+  url: {{baseUrl}}/error
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "message": ""
+  }
+}

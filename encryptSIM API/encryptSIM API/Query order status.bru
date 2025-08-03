@@ -1,0 +1,15 @@
+meta {
+  name: Query order status
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/order/:orderId
+  body: none
+  auth: none
+}
+
+params:path {
+  orderId: 
+}
