@@ -1,8 +1,10 @@
 import { config } from "dotenv";
+import { faker } from '@faker-js/faker';
 import { AiraloService, AiraloPackage } from "@montarist/airalo-api";
 import * as admin from "firebase-admin";
 import { accessSecretValue, GCloudLogger } from "../helper";
 import z from "zod";
+
 config();
 
 export interface SimOrder {
@@ -11,11 +13,62 @@ export interface SimOrder {
   qrcode_url: string;
   created_at: string;
   direct_apple_installation_url?: string;
+  country_code?: string
+  package_id: string
+  package_title: string
+  region?: string
+}
+export function generateFakeSims(count: number, order: OrderDetails): SimOrder[] {
+  return Array.from({ length: count }, () => ({
+    iccid: faker.string.numeric(20),
+    qrcode: faker.string.alphanumeric(32),
+    package_title: order.package_title,
+    package_id: order.package_id,
+    qrcode_url: faker.internet.url(),
+    created_at: faker.date.past().toISOString(),
+    direct_apple_installation_url: faker.datatype.boolean()
+      ? faker.internet.url()
+      : undefined,
+  }));
+}
+
+export function generateFakeSimsFromOrders(orders: OrderDetails[]): SimOrder[] {
+  return orders.flatMap((order) =>
+    Array.from({ length: order.quantity }, () => {
+      const iccid = faker.string.numeric(20); // Generate a 20-digit numeric ICCID
+      const qrcode = `LPA:1$wbg.prod.ondemandconnectivity.com$${faker.string.alphanumeric(
+        16
+      ).toUpperCase()}`; // Generate a fake LPA QR code
+      const qrcodeUrl = `https://www.airalo.com/qr?expires=${faker.date
+        .future()
+        .getTime()}&id=${faker.string.numeric(8)}&signature=${faker.string.alphanumeric(
+          64
+        )}`; // Generate a fake Airalo QR code URL
+      const directAppleInstallationUrl = `https://esimsetup.apple.com/esim_qrcode_provisioning?carddata=${qrcode}`; // Generate a fake Apple installation URL
+
+      return {
+        region: order.region,
+        country_code: order.country_code,
+        package_title: order.package_title,
+        package_id: order.package_id,
+        iccid,
+        qrcode,
+        qrcode_url: qrcodeUrl,
+        created_at: faker.date.past().toISOString(), // Generate a past date in ISO format
+        direct_apple_installation_url: faker.datatype.boolean()
+          ? directAppleInstallationUrl // Randomly include the Apple installation URL
+          : undefined,
+      };
+    })
+  );
 }
 
 export const OrderDetailsSchema = z.object({
   quantity: z.number().min(1).max(50),
-  package_id: z.string().min(1)
+  package_id: z.string().min(1),
+  package_title: z.string().min(1),
+  country_code: z.string().min(1).optional(),
+  region: z.string().min(1).optional(),
 })
 export type OrderDetails = z.infer<typeof OrderDetailsSchema>
 // Assumed interface for parameters to create a top-up order
@@ -112,6 +165,8 @@ export class AiraloWrapper {
       return {
         iccid: sim.iccid,
         qrcode: sim.qrcode,
+        package_title: orderDetails.package_title,
+        package_id: orderDetails.package_id,
         qrcode_url: sim.qrcode_url,
         created_at: sim.created_at,
         direct_apple_installation_url: sim.direct_apple_installation_url
