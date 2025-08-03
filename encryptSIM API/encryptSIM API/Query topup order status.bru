@@ -1,0 +1,15 @@
+meta {
+  name: Query topup order status
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{baseUrl}}/topup/:orderId
+  body: none
+  auth: none
+}
+
+params:path {
+  orderId: 
+}

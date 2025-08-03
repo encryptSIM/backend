@@ -1,0 +1,19 @@
+meta {
+  name: Get servers in a city
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/vpn/servers/:cityId
+  body: none
+  auth: none
+}
+
+params:query {
+  deviceToken: 
+}
+
+params:path {
+  cityId: 
+}
