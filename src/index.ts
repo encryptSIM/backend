@@ -1,5 +1,5 @@
 import axios from "axios";
-import { Result, ResultAsync } from "neverthrow"
+import { err, ok, Result, ResultAsync } from "neverthrow"
 import { config } from "dotenv";
 import express, { Request, Response } from 'express';
 import admin from "firebase-admin";
@@ -43,6 +43,101 @@ async function main() {
   const orderHandler = new OrderHandler(db, solanaService, airaloWrapper, logger);
   const topupHandler = new TopupHandler(db, solanaService, airaloWrapper, logger);
 
+  app.post("/sim-usage/:iccid/", async (req, res) => {
+    const iccidResult = z.string().min(1).safeParse(req.params.iccid);
+
+    if (!iccidResult.success) {
+      const errorDetails = z.treeifyError(iccidResult.error);
+      console.error("Invalid ICCID in POST request:", errorDetails);
+      return res.status(400).json({
+        success: false,
+        message: "Bad request",
+        error: errorDetails,
+      });
+    }
+
+    const iccid = iccidResult.data;
+
+    try {
+      const setResult: Result<void, Error> = await new Promise((resolve) => {
+        db.ref(`/sim-usage/${iccid}`)
+          .set(req.body.data)
+          .then(() => resolve(ok(undefined)))
+          .catch((error) => resolve(err(error)));
+      });
+
+      if (setResult.isErr()) {
+        console.error("Failed to set data in POST request:", setResult.error);
+        return res.status(500).json({
+          success: false,
+          message: "Internal server error",
+          error: setResult.error.message,
+        });
+      }
+
+      console.log("Data successfully set in POST request:", { iccid, data: req.body.data });
+      return res.status(200).json({
+        success: true,
+        message: "Data successfully set",
+      });
+    } catch (error) {
+      console.error("Unexpected error in POST request:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  });
+
+  // GET endpoint to retrieve data
+  app.get("/sim-usage/:iccid/", async (req, res) => {
+    const iccidResult = z.string().min(1).safeParse(req.params.iccid);
+
+    if (!iccidResult.success) {
+      const errorDetails = z.treeifyError(iccidResult.error);
+      console.error("Invalid ICCID in GET request:", errorDetails);
+      return res.status(400).json({
+        success: false,
+        message: "Bad request",
+        error: errorDetails,
+      });
+    }
+
+    const iccid = iccidResult.data;
+
+    try {
+      const getResult: Result<any, Error> = await new Promise((resolve) => {
+        db.ref(`/sim-usage/${iccid}`)
+          .get()
+          .then((data) => resolve(ok(data)))
+          .catch((error) => resolve(err(error)));
+      });
+
+      if (getResult.isErr()) {
+        console.error("Failed to retrieve data in GET request:", getResult.error);
+        return res.status(500).json({
+          success: false,
+          message: "Internal server error",
+          error: getResult.error.message,
+        });
+      }
+
+      const data = getResult.value;
+      console.log("Data successfully retrieved in GET request:", { iccid, data });
+      return res.status(200).json({
+        success: true,
+        data,
+      });
+    } catch (error) {
+      console.error("Unexpected error in GET request:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  });
 
   app.post("/complete-order", async (req, res) => {
     const CompleteOrderBodySchema = z.object({

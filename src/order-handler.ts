@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { SolanaService } from './services/solanaService';
 import { AiraloWrapper, SimOrder } from './services/airaloService';
 import { DBHandler, GCloudLogger } from './helper';
+import { da } from '@faker-js/faker/.';
 
 interface Order {
   orderId: string;
@@ -29,9 +30,9 @@ export class OrderHandler {
   private logger: GCloudLogger
 
   constructor(
-    db: admin.database.Database, 
-    solanaService: SolanaService, 
-    airaloWrapper: AiraloWrapper, 
+    db: admin.database.Database,
+    solanaService: SolanaService,
+    airaloWrapper: AiraloWrapper,
     logger: GCloudLogger
   ) {
     this.db = db;
@@ -71,7 +72,7 @@ export class OrderHandler {
 
     for (const order of orders) {
       if (order && typeof order === 'object' && 'orderId' in order && 'package_id' in order && 'sim' in order) {
-        const usageData = await this.airaloWrapper.getDataUsage(order.sim.iccid);        
+        const usageData = await this.airaloWrapper.getDataUsage(order.sim.iccid);
         const newObj = {};
         newObj["orderId"] = order.orderId;
         newObj["package_id"] = order.package_id;
@@ -138,6 +139,7 @@ export class OrderHandler {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         status: 'esim_provisioned', // Assuming the eSIM is already provisioned
+        //@ts-ignore
         sim: { // Include sim object matching the SimOrder interface structure
           iccid: iccid,
           qrcode: '', // Default or empty value to match SimOrder interface
@@ -250,6 +252,7 @@ export class OrderHandler {
 
   public async provisionEsim(order: Order): Promise<Order> {
     // get order
+    //@ts-ignore
     const sim = await this.airaloWrapper.placeOrder({
       quantity: order.quantity,
       package_id: order.package_id
