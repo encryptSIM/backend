@@ -15,7 +15,9 @@ export interface SimOrder {
   direct_apple_installation_url?: string;
   country_code?: string
   package_id: string
+  created_at_ms: number
   package_title: string
+  expiration_ms: number
   region?: string
 }
 export function generateFakeSims(count: number, order: OrderDetails): SimOrder[] {
@@ -23,6 +25,8 @@ export function generateFakeSims(count: number, order: OrderDetails): SimOrder[]
     iccid: faker.string.numeric(20),
     qrcode: faker.string.alphanumeric(32),
     package_title: order.package_title,
+    expiration_ms: order.expiration_ms,
+    created_at_ms: order.created_at_ms,
     package_id: order.package_id,
     qrcode_url: faker.internet.url(),
     created_at: faker.date.past().toISOString(),
@@ -51,6 +55,8 @@ export function generateFakeSimsFromOrders(orders: OrderDetails[]): SimOrder[] {
         country_code: order.country_code,
         package_title: order.package_title,
         package_id: order.package_id,
+        expiration_ms: order.expiration_ms,
+        created_at_ms: order.created_at_ms,
         iccid,
         qrcode,
         qrcode_url: qrcodeUrl,
@@ -68,6 +74,8 @@ export const OrderDetailsSchema = z.object({
   package_id: z.string().min(1),
   package_title: z.string().min(1),
   country_code: z.string().min(1).optional(),
+  expiration_ms: z.number(),
+  created_at_ms: z.number(),
   region: z.string().min(1).optional(),
 })
 export type OrderDetails = z.infer<typeof OrderDetailsSchema>
@@ -168,6 +176,8 @@ export class AiraloWrapper {
         package_title: orderDetails.package_title,
         package_id: orderDetails.package_id,
         qrcode_url: sim.qrcode_url,
+        expiration_ms: orderDetails.expiration_ms,
+        created_at_ms: orderDetails.created_at_ms,
         created_at: sim.created_at,
         direct_apple_installation_url: sim.direct_apple_installation_url
       };
