@@ -1,0 +1,19 @@
+meta {
+  name: Get Cache
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/cache/:key
+  body: none
+  auth: inherit
+}
+
+params:path {
+  key: foo
+}
+
+settings {
+  encodeUrl: true
+}

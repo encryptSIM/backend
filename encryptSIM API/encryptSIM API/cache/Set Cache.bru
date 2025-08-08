@@ -1,0 +1,44 @@
+meta {
+  name: Set Cache
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/cache/:key
+  body: json
+  auth: inherit
+}
+
+params:path {
+  key: foo
+}
+
+body:json {
+  {
+    "value": {
+      "data": {
+        "foo": {
+          "bar": [
+            {
+              "value": "bar"
+            },
+            {
+              "value": "baz"
+            },
+            {
+              "value": "foo"
+            },
+            {
+              "value": "bat"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+}

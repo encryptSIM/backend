@@ -1,0 +1,19 @@
+meta {
+  name: Delete Cache
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{baseUrl}}/cache/:key
+  body: none
+  auth: inherit
+}
+
+params:path {
+  key: foo
+}
+
+settings {
+  encodeUrl: true
+}

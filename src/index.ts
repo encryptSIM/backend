@@ -10,13 +10,13 @@ import { AiraloSIMTopup, AiraloWrapper, generateFakeSimsFromOrders, OrderDetails
 import { DVPNService } from "./services/dVPNService";
 import { SolanaService } from './services/solanaService';
 import { TopupHandler } from './topup-handler';
-import z, { success } from "zod";
+import z from "zod";
 
 // Declare db outside the async function so it's accessible later
 let db: admin.database.Database;
 
 const app = express()
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 config()
 
@@ -42,6 +42,185 @@ async function main() {
 
   const orderHandler = new OrderHandler(db, solanaService, airaloWrapper, logger);
   const topupHandler = new TopupHandler(db, solanaService, airaloWrapper, logger);
+
+  app.get("/cache/:key", async (req, res) => {
+    const keyResult = z.string().min(1).safeParse(req.params.key);
+
+    if (!keyResult.success) {
+      const errorDetails = z.treeifyError(keyResult.error);
+      console.error("Invalid cache key in GET request:", errorDetails);
+      return res.status(400).json({
+        success: false,
+        message: "Bad request",
+        error: errorDetails,
+      });
+    }
+
+    const key = keyResult.data;
+
+    try {
+      const getResult: Result<any, Error> = await new Promise((resolve) => {
+        db.ref(`/cache/${key}`)
+          .once('value')
+          .then((snapshot) => {
+            const data = snapshot.val();
+            resolve(ok(data));
+          })
+          .catch((error) => resolve(err(error)));
+      });
+
+      if (getResult.isErr()) {
+        console.error("Failed to get data in GET request:", getResult.error);
+        return res.status(500).json({
+          success: false,
+          message: "Internal server error",
+          error: getResult.error.message,
+        });
+      }
+
+      const data = getResult.value;
+
+      if (data === null) {
+        return res.status(404).json({
+          success: false,
+          message: "Cache key not found",
+        });
+      }
+
+      console.log("Data successfully retrieved in GET request:", { key });
+      return res.status(200).json({
+        success: true,
+        data: data,
+      });
+    } catch (error) {
+      console.error("Unexpected error in GET request:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  });
+
+  // Cache SET endpoint
+  app.post("/cache/:key", async (req, res) => {
+    const keyResult = z.string().min(1).safeParse(req.params.key);
+
+    if (!keyResult.success) {
+      const errorDetails = z.treeifyError(keyResult.error);
+      console.error("Invalid cache key in POST request:", errorDetails);
+      return res.status(400).json({
+        success: false,
+        message: "Bad request",
+        error: errorDetails,
+      });
+    }
+
+    const bodySchema = z.object({
+      value: z.any(),
+      ttl: z.number().optional(),
+    });
+
+    const bodyResult = bodySchema.safeParse(req.body);
+
+    if (!bodyResult.success) {
+      const errorDetails = z.treeifyError(bodyResult.error);
+      console.error("Invalid request body in POST request:", errorDetails);
+      return res.status(400).json({
+        success: false,
+        message: "Bad request",
+        error: errorDetails,
+      });
+    }
+
+    const key = keyResult.data;
+    const { value, ttl } = bodyResult.data;
+
+    try {
+      const cacheData = {
+        value,
+        timestamp: Date.now(),
+        ...(ttl && { ttl }),
+      };
+
+      const setResult: Result<void, Error> = await new Promise((resolve) => {
+        db.ref(`/cache/${key}`)
+          .set(cacheData)
+          .then(() => resolve(ok(undefined)))
+          .catch((error) => resolve(err(error)));
+      });
+
+      if (setResult.isErr()) {
+        console.error("Failed to set data in POST request:", setResult.error);
+        return res.status(500).json({
+          success: false,
+          message: "Internal server error",
+          error: setResult.error.message,
+        });
+      }
+
+      console.log("Data successfully cached in POST request:", { key, ttl });
+      return res.status(200).json({
+        success: true,
+        message: "Data successfully cached",
+      });
+    } catch (error) {
+      console.error("Unexpected error in POST request:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  });
+
+  // Cache DELETE endpoint
+  app.delete("/cache/:key", async (req, res) => {
+    const keyResult = z.string().min(1).safeParse(req.params.key);
+
+    if (!keyResult.success) {
+      const errorDetails = z.treeifyError(keyResult.error);
+      console.error("Invalid cache key in DELETE request:", errorDetails);
+      return res.status(400).json({
+        success: false,
+        message: "Bad request",
+        error: errorDetails,
+      });
+    }
+
+    const key = keyResult.data;
+
+    try {
+      const deleteResult: Result<void, Error> = await new Promise((resolve) => {
+        db.ref(`/cache/${key}`)
+          .remove()
+          .then(() => resolve(ok(undefined)))
+          .catch((error) => resolve(err(error)));
+      });
+
+      if (deleteResult.isErr()) {
+        console.error("Failed to delete data in DELETE request:", deleteResult.error);
+        return res.status(500).json({
+          success: false,
+          message: "Internal server error",
+          error: deleteResult.error.message,
+        });
+      }
+
+      console.log("Data successfully deleted in DELETE request:", { key });
+      return res.status(200).json({
+        success: true,
+        message: "Cache key successfully deleted",
+      });
+    } catch (error) {
+      console.error("Unexpected error in DELETE request:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  });
 
   app.post("/sim-usage/:iccid/", async (req, res) => {
     const iccidResult = z.string().min(1).safeParse(req.params.iccid);
