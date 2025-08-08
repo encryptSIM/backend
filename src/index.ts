@@ -10,13 +10,13 @@ import { AiraloSIMTopup, AiraloWrapper, generateFakeSimsFromOrders, OrderDetails
 import { DVPNService } from "./services/dVPNService";
 import { SolanaService } from './services/solanaService';
 import { TopupHandler } from './topup-handler';
-import z, { success } from "zod";
+import z from "zod";
 
 // Declare db outside the async function so it's accessible later
 let db: admin.database.Database;
 
 const app = express()
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 config()
 
