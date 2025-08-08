@@ -318,6 +318,65 @@ async function main() {
     }
   });
 
+
+  app.post("/mark-sim-installed", async (req, res) => {
+    const MarkSimInstalledBodySchema = z.object({
+      installed: z.boolean(),
+      iccid: z.string(),
+      id: z.string()
+    });
+
+    const parseResult = MarkSimInstalledBodySchema.safeParse(req?.body);
+
+    if (parseResult.error) {
+      console.error(JSON.stringify(parseResult.error, null, 2));
+      return res.status(400).json({
+        success: false,
+        message: "Bad request",
+        error: z.treeifyError(parseResult.error),
+      });
+    }
+
+    const { installed, iccid, id } = parseResult.data;
+
+    const updateResult = await ResultAsync.fromPromise(
+      db.ref(`sims/${id}/${iccid}`).update({ installed }),
+      (error) => error
+    );
+
+    if (updateResult.isErr()) {
+      console.error(
+        JSON.stringify(
+          {
+            message: "Failed to update SIM's installation status in the database",
+            data: {
+              error: updateResult.error,
+            },
+          },
+          null,
+          2
+        )
+      );
+      return res.status(500).json({
+        success: false,
+        message: "Failed to update SIM's installation status in the database",
+        error: updateResult.error,
+      });
+    }
+
+    console.info(
+      JSON.stringify(
+        {
+          message: "SIM updated completed successfully",
+          data: { iccid, installed },
+        },
+        null,
+        2
+      )
+    );
+    return res.status(200).json({ success: true, message: "Success" });
+  });
+
   app.post("/complete-order", async (req, res) => {
     const CompleteOrderBodySchema = z.object({
       orders: OrderDetailsSchema.array(),
