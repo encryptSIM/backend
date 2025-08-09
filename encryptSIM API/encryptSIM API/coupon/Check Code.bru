@@ -1,0 +1,19 @@
+meta {
+  name: Check Code
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/coupon/:code
+  body: none
+  auth: inherit
+}
+
+params:path {
+  code: 
+}
+
+settings {
+  encodeUrl: true
+}
