@@ -28,7 +28,10 @@ export async function accessSecretValue(secretName: string, versionId = 'latest'
   return payload
 }
 
-export async function initializeFirebase(): Promise<admin.database.Database> {
+export async function initializeFirebase(): Promise<{
+  database: admin.database.Database,
+  firestore: admin.firestore.Firestore
+}> {
   // Initialize Firebase Admin SDK
   const firebaseDatabaseUrl: string = process.env.FIREBASE_DB_URL
   if (admin.apps.length === 0) {
@@ -44,7 +47,11 @@ export async function initializeFirebase(): Promise<admin.database.Database> {
       throw new Error('Failed to authenticate Firebase');
     }
   }
-  return admin.database(); // Assign the initialized database to the global variable
+
+  return {
+    database: admin.database(),
+    firestore: admin.firestore()
+  }
 }
 
 export class DBHandler {

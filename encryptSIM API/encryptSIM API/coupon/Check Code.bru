@@ -1,17 +1,17 @@
 meta {
-  name: Get Cache
+  name: Check Code
   type: http
   seq: 1
 }
 
 get {
-  url: {{baseUrl}}/cache/:key
+  url: {{baseUrl}}/coupon/:code
   body: none
   auth: inherit
 }
 
 params:path {
-  key: packages:params=global
+  code: 
 }
 
 settings {

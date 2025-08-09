@@ -2,7 +2,6 @@ import axios from "axios";
 import { err, ok, Result, ResultAsync } from "neverthrow"
 import { config } from "dotenv";
 import express, { Request, Response } from 'express';
-import admin from "firebase-admin";
 import qs from "querystring";
 import { GCloudLogger, initializeFirebase } from './helper';
 import { OrderHandler } from './order-handler';
@@ -12,8 +11,6 @@ import { SolanaService } from './services/solanaService';
 import { TopupHandler } from './topup-handler';
 import z from "zod";
 
-// Declare db outside the async function so it's accessible later
-let db: admin.database.Database;
 
 const app = express()
 app.use(express.json({ limit: '50mb' }));
@@ -30,18 +27,112 @@ let airaloWrapper: AiraloWrapper;
 let dVPNService: DVPNService;
 
 async function main() {
-  db = await initializeFirebase();
+  const { database, firestore } = await initializeFirebase();
 
   const logger = new GCloudLogger();
   solanaService = new SolanaService(logger);
 
-  airaloWrapper = new AiraloWrapper(db, logger);
+  airaloWrapper = new AiraloWrapper(database, logger);
   await airaloWrapper.initialize();
 
   dVPNService = new DVPNService();
 
-  const orderHandler = new OrderHandler(db, solanaService, airaloWrapper, logger);
-  const topupHandler = new TopupHandler(db, solanaService, airaloWrapper, logger);
+  const orderHandler = new OrderHandler(database, solanaService, airaloWrapper, logger);
+  const topupHandler = new TopupHandler(database, solanaService, airaloWrapper, logger);
+
+  app.get("/coupon/:code", async (req, res) => {
+    const codeResult = z.string().min(3).max(32).safeParse(req.params.code);
+
+    if (!codeResult.success) {
+      const errorDetails = z.treeifyError(codeResult.error);
+      return res.status(400).json({
+        success: false,
+        message: "Bad request",
+        error: errorDetails,
+      });
+    }
+
+    const code = codeResult.data;
+
+    try {
+      const doc = await firestore.collection("coupons").doc(code).get();
+
+      if (!doc.exists) {
+        return res.status(404).json({
+          success: false,
+          message: "Coupon not found",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: doc.data(),
+      });
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  });
+
+  app.post("/coupon/:code/redeem", async (req, res) => {
+    const codeResult = z.string().min(3).max(32).safeParse(req.params.code);
+
+    if (!codeResult.success) {
+      const errorDetails = z.treeifyError(codeResult.error);
+      return res.status(400).json({
+        success: false,
+        message: "Bad request",
+        error: errorDetails,
+      });
+    }
+
+    const code = codeResult.data;
+
+    try {
+      const docRef = firestore.collection("coupons").doc(code);
+      const doc = await docRef.get();
+
+      if (!doc.exists) {
+        return res.status(404).json({
+          success: false,
+          message: "Coupon not found",
+        });
+      }
+
+      const coupon = doc.data();
+
+      if (coupon.redeemed) {
+        return res.status(400).json({
+          success: false,
+          message: "Coupon already redeemed",
+        });
+      }
+
+      if (coupon.expiresAt && new Date(coupon.expiresAt) < new Date()) {
+        return res.status(400).json({
+          success: false,
+          message: "Coupon expired",
+        });
+      }
+
+      await docRef.update({ redeemed: true });
+
+      return res.status(200).json({
+        success: true,
+        message: "Coupon redeemed successfully",
+        data: { ...coupon, redeemed: true },
+      });
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  });
 
   app.get("/cache/:key", async (req, res) => {
     const keyResult = z.string().min(1).safeParse(req.params.key);
@@ -60,7 +151,7 @@ async function main() {
 
     try {
       const getResult: Result<any, Error> = await new Promise((resolve) => {
-        db.ref(`/cache/${key}`)
+        database.ref(`/cache/${key}`)
           .once('value')
           .then((snapshot) => {
             const data = snapshot.val();
@@ -144,7 +235,7 @@ async function main() {
       };
 
       const setResult: Result<void, Error> = await new Promise((resolve) => {
-        db.ref(`/cache/${key}`)
+        database.ref(`/cache/${key}`)
           .set(cacheData)
           .then(() => resolve(ok(undefined)))
           .catch((error) => resolve(err(error)));
@@ -192,7 +283,7 @@ async function main() {
 
     try {
       const deleteResult: Result<void, Error> = await new Promise((resolve) => {
-        db.ref(`/cache/${key}`)
+        database.ref(`/cache/${key}`)
           .remove()
           .then(() => resolve(ok(undefined)))
           .catch((error) => resolve(err(error)));
@@ -239,7 +330,7 @@ async function main() {
 
     try {
       const setResult: Result<void, Error> = await new Promise((resolve) => {
-        db.ref(`/sim-usage/${iccid}`)
+        database.ref(`/sim-usage/${iccid}`)
           .set(req.body.data)
           .then(() => resolve(ok(undefined)))
           .catch((error) => resolve(err(error)));
@@ -287,7 +378,7 @@ async function main() {
 
     try {
       const getResult: Result<any, Error> = await new Promise((resolve) => {
-        db.ref(`/sim-usage/${iccid}`)
+        database.ref(`/sim-usage/${iccid}`)
           .get()
           .then((data) => resolve(ok(data)))
           .catch((error) => resolve(err(error)));
@@ -340,7 +431,7 @@ async function main() {
     const { installed, iccid, id } = parseResult.data;
 
     const updateResult = await ResultAsync.fromPromise(
-      db.ref(`sims/${id}/${iccid}`).update({ installed }),
+      database.ref(`sims/${id}/${iccid}`).update({ installed }),
       (error) => error
     );
 
@@ -445,7 +536,7 @@ async function main() {
     }, {});
 
     const updateResult = await ResultAsync.fromPromise(
-      db.ref(`sims/${id}`).update(simsObject),
+      database.ref(`sims/${id}`).update(simsObject),
       (error) => error
     );
 
@@ -497,7 +588,7 @@ async function main() {
     }
 
     const fetchResult = await ResultAsync.fromPromise(
-      db.ref(`sims/${id}`).once("value"),
+      database.ref(`sims/${id}`).once("value"),
       (error) => error
     );
 
@@ -739,7 +830,7 @@ async function main() {
       const { publicKey, privateKey } = await solanaService.createNewSolanaWallet();
       const paymentProfile: PaymentProfile = { publicKey, privateKey }
 
-      await db.ref(`/payment_profiles/${publicKey}`).set(paymentProfile);
+      await database.ref(`/payment_profiles/${publicKey}`).set(paymentProfile);
 
       return res.status(200).json({ publicKey });
     } catch (error: any) {
@@ -855,7 +946,7 @@ async function main() {
       // Save error log to Firebase
       const timestamp = new Date().toISOString();
       const timestampKey = timestamp.replace(/[^a-zA-Z0-9]/g, '_'); // Create a valid key
-      await db.ref(`/error_logs/${timestampKey}`).set(errorLog);
+      await database.ref(`/error_logs/${timestampKey}`).set(errorLog);
 
       logger.logINFO(`error logged: ${message}`)
 
