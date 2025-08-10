@@ -1,0 +1,22 @@
+meta {
+  name: Create Fake eSIM
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/generate-fake-sim
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "id": "6pGugQghQXRtWw4fjaMtHmrKEyMAFKjozIjoQODOcTE=",
+    "iccid": "89852350625390119400"
+  }
+}
+
+settings {
+  encodeUrl: true
+}
