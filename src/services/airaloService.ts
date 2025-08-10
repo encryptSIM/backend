@@ -22,7 +22,10 @@ export interface SimOrder {
 }
 export function generateFakeSims(count: number, order: OrderDetails): SimOrder[] {
   return Array.from({ length: count }, () => ({
-    iccid: faker.string.numeric(20),
+    iccid: faker.string.numeric({
+      length: 20,
+      allowLeadingZeros: false,
+    }),
     qrcode: faker.string.alphanumeric(32),
     package_title: order.package_title,
     expiration_ms: order.expiration_ms,
@@ -39,7 +42,10 @@ export function generateFakeSims(count: number, order: OrderDetails): SimOrder[]
 export function generateFakeSimsFromOrders(orders: OrderDetails[]): SimOrder[] {
   return orders.flatMap((order) =>
     Array.from({ length: order.quantity }, () => {
-      const iccid = faker.string.numeric(20); // Generate a 20-digit numeric ICCID
+      const iccid = faker.string.numeric({
+        length: 20,
+        allowLeadingZeros: false,
+      }); // Generate a 20-digit numeric ICCID
       const qrcode = `LPA:1$wbg.prod.ondemandconnectivity.com$${faker.string.alphanumeric(
         16
       ).toUpperCase()}`; // Generate a fake LPA QR code
