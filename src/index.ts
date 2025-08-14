@@ -5,11 +5,12 @@ import express, { Request, Response } from 'express';
 import qs from "querystring";
 import { GCloudLogger, initializeFirebase } from './helper';
 import { OrderHandler } from './order-handler';
-import { AiraloSIMTopup, AiraloWrapper, generateFakeSimsFromOrders, OrderDetailsSchema } from './services/airaloService';
+import { AiraloSIMTopup, AiraloWrapper, generateFakeSims, generateFakeSimsFromOrders, generateFakeTopupsFromOrder, OrderDetailsSchema, TopupOrderDetailsSchema } from './services/airaloService';
 import { DVPNService } from "./services/dVPNService";
 import { SolanaService } from './services/solanaService';
 import { TopupHandler } from './topup-handler';
 import z from "zod";
+import { faker } from '@faker-js/faker';
 
 
 const app = express()
@@ -468,6 +469,178 @@ async function main() {
     return res.status(200).json({ success: true, message: "Success" });
   });
 
+  app.post('/generate-fake-sim', async (req, res) => {
+    const bodySchema = z.object({
+      iccid: z.string(),
+      id: z.string()
+    });
+
+    const parseResult = bodySchema.safeParse(req?.body);
+
+    if (parseResult.error) {
+      console.error(JSON.stringify(parseResult.error, null, 2));
+      return res.status(400).json({
+        success: false,
+        message: "Bad request",
+        error: z.treeifyError(parseResult.error),
+      });
+    }
+
+    const { iccid, id } = parseResult.data;
+    const order = {
+      quantity: 1,
+      package_id: faker.string.uuid(),
+      package_title: "1 GB - 7 Days",
+      country_code: "AU",
+      expiration_ms: faker.date.future().getTime(),
+      created_at_ms: Date.now(),
+    }
+    const fakeSim = {
+      ...generateFakeSims(1, order)[0],
+      iccid,
+    }
+    console.log(JSON.stringify({ fakeSim, order }, null, 2))
+
+    const updateResult = await ResultAsync.fromPromise(
+      database.ref(`sims/${id}/${iccid}`).update(fakeSim),
+      (error) => error
+    );
+
+    if (updateResult.isErr()) {
+      console.error(
+        JSON.stringify(
+          {
+            message: "Failed to update SIMs in the database",
+            data: {
+              error: updateResult.error,
+            },
+          },
+          null,
+          2
+        )
+      );
+      return res.status(500).json({
+        success: false,
+        message: "Failed to update SIMs in the database",
+        error: updateResult.error,
+      });
+    }
+
+    console.info(
+      JSON.stringify(
+        {
+          message: "Sim created successfully",
+          data: { id, fakeSim },
+        },
+        null,
+        2
+      )
+    );
+    return res.status(200).json({ success: true, message: "Sim createds", fakeSim });
+  })
+
+  app.post("/complete-topup-order", async (req, res) => {
+    const CompleteTopupOrderBodySchema = z.object({
+      order: TopupOrderDetailsSchema,
+      id: z.string(),
+    });
+
+    const parseResult = CompleteTopupOrderBodySchema.safeParse(req?.body);
+
+    if (parseResult.error) {
+      console.error(JSON.stringify(parseResult.error, null, 2));
+      return res.status(400).json({
+        success: false,
+        message: "Bad request",
+        error: z.treeifyError(parseResult.error),
+      });
+    }
+
+    const { order, id } = parseResult.data;
+
+    let sims;
+
+    if (process.env.MOCK_COMPLETE_ORDER_ENABLED === "true") {
+      sims = generateFakeTopupsFromOrder(order, id);
+
+    } else {
+      // const placeOrderResults = await ResultAsync.fromPromise(
+      //   airaloWrapper.createTopupOrder(order),
+      //   (error) => error
+      // );
+
+      //   const failedOrders = placeOrderResults.filter((result) => result.isErr());
+      //   if (failedOrders.length > 0) {
+      //     console.error(
+      //       JSON.stringify(
+      //         {
+      //           message: "Failed to place some orders",
+      //           data: {
+      //             failedOrders: failedOrders.map((result) => result.error),
+      //           },
+      //         },
+      //         null,
+      //         2
+      //       )
+      //     );
+      //     return res.status(500).json({
+      //       success: false,
+      //       message: "Failed to place some orders",
+      //       errors: failedOrders.map((result) => result.error),
+      //     });
+      //   }
+      //
+      //   sims = placeOrderResults
+      //     .map((result) => {
+      //       if (result.isOk()) return result.value;
+      //       return null;
+      //     })
+      //     .filter((t) => !!t);
+      // }
+      //
+      // const simsObject = sims.reduce((acc, sim) => {
+      //   acc[sim.iccid] = sim;
+      //   return acc;
+      // }, {});
+      //
+      // const updateResult = await ResultAsync.fromPromise(
+      //   database.ref(`sims/${id}`).update(simsObject),
+      //   (error) => error
+      // );
+      //
+      // if (updateResult.isErr()) {
+      //   console.error(
+      //     JSON.stringify(
+      //       {
+      //         message: "Failed to update SIMs in the database",
+      //         data: {
+      //           error: updateResult.error,
+      //         },
+      //       },
+      //       null,
+      //       2
+      //     )
+      //   );
+      //   return res.status(500).json({
+      //     success: false,
+      //     message: "Failed to update SIMs in the database",
+      //     error: updateResult.error,
+      //   });
+    }
+    //
+    // console.info(
+    //   JSON.stringify(
+    //     {
+    //       message: "Order completed successfully",
+    //       data: { id, sims },
+    //     },
+    //     null,
+    //     2
+    //   )
+    // );
+    // return res.status(200).json({ success: true, message: "Order completed", sims });
+  });
+
   app.post("/complete-order", async (req, res) => {
     const CompleteOrderBodySchema = z.object({
       orders: OrderDetailsSchema.array(),
@@ -491,6 +664,7 @@ async function main() {
 
     if (process.env.MOCK_COMPLETE_ORDER_ENABLED === "true") {
       sims = generateFakeSimsFromOrders(orders);
+
     } else {
       const placeOrderResults = await Promise.all(
         orders.map((order) =>

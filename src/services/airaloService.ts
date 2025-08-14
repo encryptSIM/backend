@@ -1,6 +1,6 @@
 import { config } from "dotenv";
 import { faker } from '@faker-js/faker';
-import { AiraloService, AiraloPackage } from "@montarist/airalo-api";
+import { AiraloService, AiraloPackage, AiraloTopupOrderParams, AiraloOrder } from "@montarist/airalo-api";
 import * as admin from "firebase-admin";
 import { accessSecretValue, GCloudLogger } from "../helper";
 import z from "zod";
@@ -75,6 +75,37 @@ export function generateFakeSimsFromOrders(orders: OrderDetails[]): SimOrder[] {
   );
 }
 
+export function generateFakeTopupsFromOrder(order: TopupOrderDetails, id: string): AiraloOrder {
+  return {
+    region: order.region,
+    currency: "USD",
+    country_code: order.country_code,
+    package_title: order.package_title,
+    package_id: order.package_id,
+    expiration_ms: order.expiration_ms,
+    created_at_ms: order.created_at_ms,
+    iccid: order.iccid,
+    id,
+    quantity: 1,
+    description: "",
+    esim_type: "",
+    data: "",
+    price: 0,
+    net_price: 0,
+  };
+}
+
+export const TopupOrderDetailsSchema = z.object({
+  package_id: z.string().min(1),
+  iccid: z.string().min(1),
+  package_title: z.string().min(1),
+  country_code: z.string().min(1).optional(),
+  expiration_ms: z.number(),
+  created_at_ms: z.number(),
+  region: z.string().min(1).optional(),
+})
+export type TopupOrderDetails = z.infer<typeof TopupOrderDetailsSchema>
+
 export const OrderDetailsSchema = z.object({
   quantity: z.number().min(1).max(50),
   package_id: z.string().min(1),
@@ -85,25 +116,6 @@ export const OrderDetailsSchema = z.object({
   region: z.string().min(1).optional(),
 })
 export type OrderDetails = z.infer<typeof OrderDetailsSchema>
-// Assumed interface for parameters to create a top-up order
-export interface AiraloTopupOrderParams {
-  iccid: string;
-  package_id: string;
-  description?: string;
-}
-
-// Assumed interface for the response of a top-up order
-export interface AiraloTopupOrder {
-  id: string;
-  package_id: string;
-  currency: string;
-  quantity: number;
-  description: string;
-  esim_type: string;
-  data: string;
-  price: number;
-  net_price: number;
-}
 
 // Assumed interface for an available SIM top-up package
 export interface AiraloSIMTopup {
@@ -193,7 +205,7 @@ export class AiraloWrapper {
     }
   }
   // : Promise<AiraloOrder>
-  public async createTopupOrder(orderData: AiraloTopupOrderParams): Promise<AiraloTopupOrder> {
+  public async createTopupOrder(orderData: AiraloTopupOrderParams): Promise<AiraloOrder> {
     try {
 
       const params: any = {
@@ -213,6 +225,9 @@ export class AiraloWrapper {
 
       return {
         id: parsed_order.data.id,
+        iccid: orderData.iccid,
+        expiration_ms: Date.now(),
+        created_at_ms: 0,
         package_id: parsed_order.data.package_id,
         currency: parsed_order.data.currency,
         quantity: parsed_order.data.quantity,
@@ -220,7 +235,8 @@ export class AiraloWrapper {
         esim_type: parsed_order.data.esim_type,
         data: parsed_order.data.data,
         price: parsed_order.data.price,
-        net_price: parsed_order.data.net_price,     // Adjust path as per actual SDK response
+        net_price: parsed_order.data.net_price,
+        package_title: orderData.package_title,
       };
     } catch (error: any) {
       this.logger.logERROR(`Error placing Airalo top-up order: ${error}`);
