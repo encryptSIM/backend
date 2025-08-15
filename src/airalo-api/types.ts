@@ -5,3 +5,4 @@ export type GetPackagesResponse = paths["/v2/packages"]["get"]["responses"]["200
 export type Operator = NonNullable<NonNullable<GetPackagesResponse["data"]>[number]["operators"]>[number];
 export type Coverage = NonNullable<Operator["coverages"]>[number];
 export type Country = NonNullable<Operator["countries"]>[number];
+export type Package = NonNullable<Operator["packages"]>[number];
