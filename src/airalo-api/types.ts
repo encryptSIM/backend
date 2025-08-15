@@ -4,3 +4,4 @@ export type Usage = NonNullable<NonNullable<paths['/v2/sims/{sim_iccid}/usage'][
 export type GetPackagesResponse = paths["/v2/packages"]["get"]["responses"]["200"]["content"]["application/json"];
 export type Operator = NonNullable<NonNullable<GetPackagesResponse["data"]>[number]["operators"]>[number];
 export type Coverage = NonNullable<Operator["coverages"]>[number];
+export type Country = NonNullable<Operator["countries"]>[number];
