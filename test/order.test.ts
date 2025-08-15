@@ -32,7 +32,7 @@ describe('order', () => {
     });
 
     expect(postOrderResponse.ok).toBe(true);
-    const orderResponseData = await postOrderResponse.json();
+    const orderResponseData: any = await postOrderResponse.json();
     const orderId = orderResponseData.orderId;
     expect(orderId).toBeDefined();
 
