@@ -6,3 +6,4 @@ export type Operator = NonNullable<NonNullable<GetPackagesResponse["data"]>[numb
 export type Coverage = NonNullable<Operator["coverages"]>[number];
 export type Country = NonNullable<Operator["countries"]>[number];
 export type Package = NonNullable<Operator["packages"]>[number];
+export type Prices = NonNullable<Package["prices"]>["recommended_retail_price"];
