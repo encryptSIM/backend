@@ -10,10 +10,13 @@ import { DVPNService } from "./services/dVPNService";
 import { SolanaService } from './services/solanaService';
 import { TopupHandler } from './topup-handler';
 import z from "zod";
+import { airaloFetchClient } from "./airalo-api/api";
+import cors from 'cors'
 
 
 const app = express()
 app.use(express.json({ limit: '50mb' }));
+app.use(cors())
 
 config()
 
@@ -39,6 +42,54 @@ async function main() {
 
   const orderHandler = new OrderHandler(database, solanaService, airaloWrapper, logger);
   const topupHandler = new TopupHandler(database, solanaService, airaloWrapper, logger);
+
+  app.get("/v2/packages", async (req, res) => {
+    try {
+      const result = await airaloFetchClient.GET("/v2/packages", {
+        headers: {
+          Authorization: req.headers.authorization || "",
+        },
+        params: {
+          query: {
+            "filter[type]": req.query["filter[type]"]
+              ? String(req.query["filter[type]"])
+              : undefined,
+            "filter[country]": req.query["filter[country]"]
+              ? String(req.query["filter[country]"])
+              : undefined,
+          },
+        },
+      });
+
+      // Send back the API response
+      res.status(result.response.status).json(result.data);
+    } catch (err) {
+      console.error("Proxy error:", err);
+      res.status(500).json({ error: "Failed to fetch packages" });
+    }
+  });
+
+  app.get("/v2/sims/:sim_iccid/usage", async (req, res) => {
+    try {
+      const { sim_iccid } = req.params;
+
+      const result = await airaloFetchClient.GET("/v2/sims/{sim_iccid}/usage", {
+        headers: {
+          Authorization: req.headers.authorization || "",
+        },
+        params: {
+          path: {
+            sim_iccid, // from Express route param
+          },
+        },
+      });
+
+      res.status(result.response.status).json(result.data);
+    } catch (err) {
+      console.error("Proxy error:", err);
+      res.status(500).json({ error: "Failed to fetch SIM usage" });
+    }
+  });
 
   app.get("/coupon/:code", async (req, res) => {
     const codeResult = z.string().min(3).max(32).safeParse(req.params.code);
