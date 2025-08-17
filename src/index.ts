@@ -546,7 +546,16 @@ async function main() {
       const placeOrderResults = await Promise.all(
         orders.map((order) =>
           ResultAsync.fromPromise(
-            airaloWrapper.placeOrder(order),
+            airaloWrapper.placeOrder(order)
+              .then((sim) => ({
+                ...sim,
+                region: order.region,
+                country_code: order.country_code,
+                package_id: order.package_id,
+                package_title: order.package_title,
+                expiration_ms: order.expiration_ms,
+                created_at_ms: order.created_at_ms,
+              })),
             (error) => error
           )
         )
