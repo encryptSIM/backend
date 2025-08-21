@@ -43,25 +43,46 @@ async function main() {
   const orderHandler = new OrderHandler(database, solanaService, airaloWrapper, logger);
   const topupHandler = new TopupHandler(database, solanaService, airaloWrapper, logger);
 
+  app.set("query parser", (str: string) => qs.parse(str));
+
   app.get("/v2/packages", async (req, res) => {
     try {
+      //@ts-ignore
+      const type = req.query.filter?.type;
+      //@ts-ignore
+      const country = req.query.filter?.country;
+
       const result = await airaloFetchClient.GET("/v2/packages", {
         headers: {
           Authorization: req.headers.authorization || "",
         },
         params: {
           query: {
-            "filter[type]": req.query["filter[type]"]
-              ? String(req.query["filter[type]"])
-              : undefined,
-            "filter[country]": req.query["filter[country]"]
-              ? String(req.query["filter[country]"])
-              : undefined,
+            "filter[type]": type,
+            "filter[country]": country,
           },
         },
       });
 
-      // Send back the API response
+      console.log(
+        "formatted query",
+        JSON.stringify(
+          {
+            headers: {
+              Authorization: req.headers.authorization || "",
+            },
+            params: {
+              query: {
+                "filter[type]": type,
+                "filter[country]": country,
+              },
+            },
+          },
+          null,
+          2
+        )
+      );
+
       res.status(result.response.status).json(result.data);
     } catch (err) {
       console.error("Proxy error:", err);
@@ -330,18 +351,24 @@ async function main() {
       });
     }
 
-    const key = keyResult.data;
+    // ✅ Encode key to make it Firebase-safe
+    const rawKey = keyResult.data;
+    const safeKey = encodeURIComponent(rawKey);
 
     try {
       const deleteResult: Result<void, Error> = await new Promise((resolve) => {
-        database.ref(`/cache/${key}`)
+        database
+          .ref(`/cache/${safeKey}`)
           .remove()
           .then(() => resolve(ok(undefined)))
           .catch((error) => resolve(err(error)));
       });
 
       if (deleteResult.isErr()) {
-        console.error("Failed to delete data in DELETE request:", deleteResult.error);
+        console.error(
+          "Failed to delete data in DELETE request:",
+          deleteResult.error
+        );
         return res.status(500).json({
           success: false,
           message: "Internal server error",
@@ -349,12 +376,12 @@ async function main() {
         });
       }
 
-      console.log("Data successfully deleted in DELETE request:", { key });
+      console.log("Data successfully deleted in DELETE request:", { rawKey });
       return res.status(200).json({
         success: true,
         message: "Cache key successfully deleted",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Unexpected error in DELETE request:", error);
       return res.status(500).json({
         success: false,
