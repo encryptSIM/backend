@@ -330,18 +330,24 @@ async function main() {
       });
     }
 
-    const key = keyResult.data;
+    // ✅ Encode key to make it Firebase-safe
+    const rawKey = keyResult.data;
+    const safeKey = encodeURIComponent(rawKey);
 
     try {
       const deleteResult: Result<void, Error> = await new Promise((resolve) => {
-        database.ref(`/cache/${key}`)
+        database
+          .ref(`/cache/${safeKey}`)
           .remove()
           .then(() => resolve(ok(undefined)))
           .catch((error) => resolve(err(error)));
       });
 
       if (deleteResult.isErr()) {
-        console.error("Failed to delete data in DELETE request:", deleteResult.error);
+        console.error(
+          "Failed to delete data in DELETE request:",
+          deleteResult.error
+        );
         return res.status(500).json({
           success: false,
           message: "Internal server error",
@@ -349,12 +355,12 @@ async function main() {
         });
       }
 
-      console.log("Data successfully deleted in DELETE request:", { key });
+      console.log("Data successfully deleted in DELETE request:", { rawKey });
       return res.status(200).json({
         success: true,
         message: "Cache key successfully deleted",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Unexpected error in DELETE request:", error);
       return res.status(500).json({
         success: false,
