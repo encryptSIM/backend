@@ -43,25 +43,46 @@ async function main() {
   const orderHandler = new OrderHandler(database, solanaService, airaloWrapper, logger);
   const topupHandler = new TopupHandler(database, solanaService, airaloWrapper, logger);
 
+  app.set("query parser", (str: string) => qs.parse(str));
+
   app.get("/v2/packages", async (req, res) => {
     try {
+      //@ts-ignore
+      const type = req.query.filter?.type;
+      //@ts-ignore
+      const country = req.query.filter?.country;
+
       const result = await airaloFetchClient.GET("/v2/packages", {
         headers: {
           Authorization: req.headers.authorization || "",
         },
         params: {
           query: {
-            "filter[type]": req.query["filter[type]"]
-              ? String(req.query["filter[type]"])
-              : undefined,
-            "filter[country]": req.query["filter[country]"]
-              ? String(req.query["filter[country]"])
-              : undefined,
+            "filter[type]": type,
+            "filter[country]": country,
           },
         },
       });
 
-      // Send back the API response
+      console.log(
+        "formatted query",
+        JSON.stringify(
+          {
+            headers: {
+              Authorization: req.headers.authorization || "",
+            },
+            params: {
+              query: {
+                "filter[type]": type,
+                "filter[country]": country,
+              },
+            },
+          },
+          null,
+          2
+        )
+      );
+
       res.status(result.response.status).json(result.data);
     } catch (err) {
       console.error("Proxy error:", err);
