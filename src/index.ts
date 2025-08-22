@@ -16,7 +16,16 @@ import cors from 'cors'
 
 const app = express()
 app.use(express.json({ limit: '50mb' }));
-app.use(cors())
+
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
+app.options("*", cors());
 
 config()
 
@@ -100,7 +109,7 @@ async function main() {
         },
         params: {
           path: {
-            sim_iccid, // from Express route param
+            sim_iccid,
           },
         },
       });
@@ -546,6 +555,19 @@ async function main() {
     return res.status(200).json({ success: true, message: "Success" });
   });
 
+  function removeUndefined(obj) {
+    if (Array.isArray(obj)) {
+      return obj.map(removeUndefined);
+    } else if (obj && typeof obj === "object") {
+      return Object.fromEntries(
+        Object.entries(obj)
+          .filter(([_, v]) => v !== undefined)
+          .map(([k, v]) => [k, removeUndefined(v)])
+      );
+    }
+    return obj;
+  }
+
   app.post("/complete-order", async (req, res) => {
     const CompleteOrderBodySchema = z.object({
       orders: OrderDetailsSchema.array(),
@@ -618,7 +640,7 @@ async function main() {
     }
 
     const simsObject = sims.reduce((acc, sim) => {
-      acc[sim.iccid] = sim;
+      acc[sim.iccid] = removeUndefined(sim);
       return acc;
     }, {});
 
