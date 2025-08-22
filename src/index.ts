@@ -317,7 +317,7 @@ async function main() {
 
       const setResult: Result<void, Error> = await new Promise((resolve) => {
         database.ref(`/cache/${key}`)
-          .set(cacheData)
+          .set(removeUndefined(cacheData))
           .then(() => resolve(ok(undefined)))
           .catch((error) => resolve(err(error)));
       });
@@ -418,7 +418,7 @@ async function main() {
     try {
       const setResult: Result<void, Error> = await new Promise((resolve) => {
         database.ref(`/sim-usage/${iccid}`)
-          .set(req.body.data)
+          .set(removeUndefined(req.body.data))
           .then(() => resolve(ok(undefined)))
           .catch((error) => resolve(err(error)));
       });
@@ -939,7 +939,7 @@ async function main() {
       const { publicKey, privateKey } = await solanaService.createNewSolanaWallet();
       const paymentProfile: PaymentProfile = { publicKey, privateKey }
 
-      await database.ref(`/payment_profiles/${publicKey}`).set(paymentProfile);
+      await database.ref(`/payment_profiles/${publicKey}`).set(removeUndefined(paymentProfile));
 
       return res.status(200).json({ publicKey });
     } catch (error: any) {
