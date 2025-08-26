@@ -8,6 +8,7 @@ import routes from './routes';
 import { AiraloWrapper } from './services/airaloService';
 import { DVPNService } from "./services/dVPNService";
 import { SolanaService } from './services/solanaService';
+import admin from "firebase-admin";
 import { TopupHandler } from './topup-handler';
 
 const app = express();
@@ -32,8 +33,8 @@ export interface Services {
   orderHandler: OrderHandler;
   topupHandler: TopupHandler;
   logger: GCloudLogger;
-  database: any;
-  firestore: any;
+  database: admin.database.Database;
+  firestore: admin.firestore.Firestore;
 }
 
 async function main() {
