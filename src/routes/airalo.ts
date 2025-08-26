@@ -3,6 +3,7 @@ import axios from 'axios';
 import qs from 'querystring';
 import { Services } from '../index';
 import { airaloFetchClient } from "../airalo-api/api";
+import z from 'zod';
 
 export default function airaloRoutes(services: Services): Router {
   const router = Router();
@@ -10,8 +11,12 @@ export default function airaloRoutes(services: Services): Router {
 
   router.get("/v2/packages", async (req, res) => {
     try {
-      const type = req.query.filter?.type;
-      const country = req.query.filter?.country;
+      const filterSchema = z.object({
+        type: z.string(),
+        country: z.string()
+      })
+
+      const { type, country } = filterSchema.parse(req.query.filter)
 
       const result = await airaloFetchClient.GET("/v2/packages", {
         headers: {
@@ -47,7 +52,7 @@ export default function airaloRoutes(services: Services): Router {
       res.status(result.response.status).json(result.data);
     } catch (err) {
       console.error("Proxy error:", err);
-      res.status(500).json({ error: "Failed to fetch packages" });
+      res.status(500).json({ error: "Failed to fetch packages", err });
     }
   });
 
