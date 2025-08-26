@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { ResultAsync } from "neverthrow";
 import z from "zod";
 import { Services } from '../index';
-import { OrderDetailsSchema, generateFakeSimsFromOrders } from '../services/airaloService';
+import { OrderDetailsSchema, SimOrder, generateFakeSimsFromOrders } from '../services/airaloService';
 import { removeUndefined } from '../utils/helpers';
 
 export default function orderRoutes(services: Services): Router {
@@ -33,7 +33,7 @@ export default function orderRoutes(services: Services): Router {
 
     const { orders, id } = parseResult.data;
 
-    let sims;
+    let sims: SimOrder[];
 
     if (process.env.MOCK_COMPLETE_ORDER_ENABLED === "true") {
       sims = generateFakeSimsFromOrders(orders);
