@@ -1,20 +1,16 @@
-import axios from "axios";
-import { err, ok, Result, ResultAsync } from "neverthrow"
+import cors from 'cors';
 import { config } from "dotenv";
-import express, { Request, Response } from 'express';
+import express from 'express';
 import qs from "querystring";
 import { GCloudLogger, initializeFirebase } from './helper';
 import { OrderHandler } from './order-handler';
-import { AiraloSIMTopup, AiraloWrapper, generateFakeSimsFromOrders, OrderDetailsSchema } from './services/airaloService';
+import routes from './routes';
+import { AiraloWrapper } from './services/airaloService';
 import { DVPNService } from "./services/dVPNService";
 import { SolanaService } from './services/solanaService';
 import { TopupHandler } from './topup-handler';
-import z from "zod";
-import { airaloFetchClient } from "./airalo-api/api";
-import cors from 'cors'
 
-
-const app = express()
+const app = express();
 app.use(express.json({ limit: '50mb' }));
 
 app.use(
@@ -27,30 +23,41 @@ app.use(
 
 app.options("*", cors());
 
-config()
+config();
 
-interface PaymentProfile {
-  publicKey: string;
-  privateKey: string;
+export interface Services {
+  solanaService: SolanaService;
+  airaloWrapper: AiraloWrapper;
+  dVPNService: DVPNService;
+  orderHandler: OrderHandler;
+  topupHandler: TopupHandler;
+  logger: GCloudLogger;
+  database: any;
+  firestore: any;
 }
-
-let solanaService: SolanaService;
-let airaloWrapper: AiraloWrapper;
-let dVPNService: DVPNService;
 
 async function main() {
   const { database, firestore } = await initializeFirebase();
-
   const logger = new GCloudLogger();
-  solanaService = new SolanaService(logger);
 
-  airaloWrapper = new AiraloWrapper(database, logger);
+  const solanaService = new SolanaService(logger);
+  const airaloWrapper = new AiraloWrapper(database, logger);
   await airaloWrapper.initialize();
 
-  dVPNService = new DVPNService();
-
+  const dVPNService = new DVPNService();
   const orderHandler = new OrderHandler(database, solanaService, airaloWrapper, logger);
   const topupHandler = new TopupHandler(database, solanaService, airaloWrapper, logger);
+
+  const services: Services = {
+    solanaService,
+    airaloWrapper,
+    dVPNService,
+    orderHandler,
+    topupHandler,
+    logger,
+    database,
+    firestore
+  };
 
   app.set("query parser", (str: string) => qs.parse(str));
 
@@ -1109,13 +1116,13 @@ async function main() {
   app.get('/health', (req, res) => {
     return res.send("OK");
   });
+  // Use all routes
+  app.use('/api', routes(services));
 
   const port = parseInt(process.env.PORT || '3000');
   app.listen(port, () => {
     console.log(`listening on port ${port}`);
   });
-
 }
 
-// Call the main async function to start the application
 main().catch(console.error);
