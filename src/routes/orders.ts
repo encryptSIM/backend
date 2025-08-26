@@ -7,7 +7,7 @@ import { removeUndefined } from '../utils/helpers';
 
 export default function orderRoutes(services: Services): Router {
   const router = Router();
-  const { database, orderHandler, airaloWrapper, logger } = services;
+  const { database, orderHandler, airaloWrapper } = services;
 
   router.post('/order', orderHandler.createOrder);
   router.post('/add-order', orderHandler.addOrder);
