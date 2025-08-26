@@ -4,3 +4,6 @@ dist
 .DS_Store
 .env.yaml
 DVPNSDK v3.9
+.env.prod.yaml
+.env.staging.yaml
+.env.dev.yaml
