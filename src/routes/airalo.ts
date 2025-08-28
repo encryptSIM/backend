@@ -13,7 +13,7 @@ export default function airaloRoutes(services: Services): Router {
     try {
       const filterSchema = z.object({
         type: z.string(),
-        country: z.string()
+        country: z.string().optional()
       })
 
       const { type, country } = filterSchema.parse(req.query.filter)
