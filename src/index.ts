@@ -346,6 +346,44 @@ async function main() {
     }
   });
 
+  app.delete("/cache", async (req, res) => {
+
+    try {
+      const deleteResult: Result<void, Error> = await new Promise((resolve) => {
+        database
+          .ref(`/cache`)
+          .remove()
+          .then(() => resolve(ok(undefined)))
+          .catch((error) => resolve(err(error)));
+      });
+
+      if (deleteResult.isErr()) {
+        console.error(
+          "Failed to delete data in DELETE request:",
+          deleteResult.error
+        );
+        return res.status(500).json({
+          success: false,
+          message: "Internal server error",
+          error: deleteResult.error.message,
+        });
+      }
+
+      console.log("Data successfully deleted in cache");
+      return res.status(200).json({
+        success: true,
+        message: "Cache key successfully deleted",
+      });
+    } catch (error: any) {
+      console.error("Unexpected error in DELETE request:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  });
+
   // Cache DELETE endpoint
   app.delete("/cache/:key", async (req, res) => {
     const keyResult = z.string().min(1).safeParse(req.params.key);
