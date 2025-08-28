@@ -1,0 +1,15 @@
+meta {
+  name: Clear Cache
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/cache
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+}
